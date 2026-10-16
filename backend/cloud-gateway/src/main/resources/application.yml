@@ -1,0 +1,59 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: cloud-gateway
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
+        username: ${NACOS_USERNAME:nacos}
+        password: ${NACOS_PASSWORD:nacos}
+    gateway:
+      # 关闭基于服务名的自动路由，统一使用下方显式路由，避免路径被意外放行
+      discovery:
+        locator:
+          enabled: false
+          lower-case-service-id: true
+      globalcors:
+        add-to-simple-url-handler-mapping: true
+        cors-configurations:
+          '[/**]':
+            allowed-origin-patterns: "*"
+            allowed-methods: "*"
+            allowed-headers: "*"
+            allow-credentials: true
+            max-age: 3600
+      routes:
+        # /api/auth/** -> cloud-auth-service 的 /auth/**
+        - id: cloud-auth-service
+          uri: lb://cloud-auth-service
+          predicates:
+            - Path=/api/auth/**
+          filters:
+            - StripPrefix=1
+        # /api/user/** -> cloud-user-service 的 /user/**
+        - id: cloud-user-service
+          uri: lb://cloud-user-service
+          predicates:
+            - Path=/api/user/**
+          filters:
+            - StripPrefix=1
+        # /api/admin/** -> cloud-user-service 的 /admin/**（后台管理接口，仅 ROLE_ADMIN 可用）
+        - id: cloud-admin-service
+          uri: lb://cloud-user-service
+          predicates:
+            - Path=/api/admin/**
+          filters:
+            - StripPrefix=1
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # 网关使用公钥离线验签，无需调用认证中心
+          public-key-location: classpath:keys/public.pem
+
+logging:
+  level:
+    com.example: debug

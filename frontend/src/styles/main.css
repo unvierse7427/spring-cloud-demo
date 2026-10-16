@@ -1,0 +1,51 @@
+:root {
+  --bg: #f4f6fb;
+  --surface: #ffffff;
+  --border: #e5e8f0;
+  --text: #1b2334;
+  --text-muted: #6c7689;
+  --primary: #4f46e5;
+  --success: #14875c;
+  --danger: #cf3f4b;
+
+  /* 让 Element Plus 主色与控制台主题保持一致 */
+  --el-color-primary: #4f46e5;
+  --el-color-primary-light-3: #7d76ec;
+  --el-color-primary-light-5: #a5a0f2;
+  --el-color-primary-light-7: #cdcaf7;
+  --el-color-primary-light-8: #e0defa;
+  --el-color-primary-light-9: #eef0ff;
+  --el-color-primary-dark-2: #3f38b7;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', 'PingFang SC', 'Microsoft YaHei', system-ui, -apple-system, sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}

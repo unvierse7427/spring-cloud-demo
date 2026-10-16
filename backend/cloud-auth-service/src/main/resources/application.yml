@@ -1,0 +1,52 @@
+server:
+  port: 9000
+
+spring:
+  application:
+    name: cloud-auth-service
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
+        username: ${NACOS_USERNAME:nacos}
+        password: ${NACOS_PASSWORD:nacos}
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: ${MYSQL_URL:jdbc:mysql://127.0.0.1:3306/project?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true}
+    username: ${MYSQL_USERNAME:root}
+    password: ${MYSQL_PASSWORD:123456}
+  redis:
+    host: ${REDIS_HOST:127.0.0.1}
+    port: ${REDIS_PORT:6379}
+    password: ${REDIS_PASSWORD:}
+    database: ${REDIS_DATABASE:0}
+    timeout: 3s
+    lettuce:
+      pool:
+        max-active: 16
+        max-idle: 8
+        min-idle: 0
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # 校验 JWT 使用公钥，与网关、业务服务保持一致
+          public-key-location: classpath:keys/public.pem
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+
+cloud:
+  jwt:
+    issuer: cloud-auth-service
+    key-id: cloud-jwt-key
+    access-token-ttl: 2h
+    refresh-token-ttl: 7d
+  online:
+    # 超过该时间没有任何接口调用则视为离线，每次接口调用会续期
+    timeout: 30m
+
+logging:
+  level:
+    com.example: debug

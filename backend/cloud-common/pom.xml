@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.example</groupId>
+        <artifactId>cloud-parent</artifactId>
+        <version>1.0.0</version>
+    </parent>
+
+    <artifactId>cloud-common</artifactId>
+    <name>cloud-common</name>
+    <description>公共依赖：统一响应结果、JWT 权限转换、Redis 在线状态、日志采集</description>
+
+    <dependencies>
+        <!-- 仅用于编译公共的 JWT 权限转换器，实际运行由各服务自行引入 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <!-- 在线状态存储，实际运行时由各业务服务引入 starter-data-redis -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <!-- 日志实体与 Mapper 需要的注解和 BaseMapper，运行时由各业务服务的 MyBatis-Plus 提供 -->
+        <dependency>
+            <groupId>com.baomidou</groupId>
+            <artifactId>mybatis-plus-core</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <!-- 公共的认证失败处理器需要 Servlet API 与 JSON 序列化，均由运行时的 Web 容器提供 -->
+        <dependency>
+            <groupId>jakarta.servlet</groupId>
+            <artifactId>jakarta.servlet-api</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <scope>provided</scope>
+        </dependency>
+    </dependencies>
+
+</project>
