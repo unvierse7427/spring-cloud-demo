@@ -24,10 +24,10 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div>
+  <el-card shadow="never">
     <p class="hint">共 {{ total }} 项，权限通过角色授予用户</p>
 
-    <el-table v-loading="loading" :data="permissions" border stripe>
+    <el-table v-loading="loading" :data="permissions">
       <el-table-column prop="id" label="ID" width="80" />
       <el-table-column label="权限码" min-width="180">
         <template #default="{ row }">
@@ -40,13 +40,13 @@ onMounted(async () => {
       </el-table-column>
       <el-table-column prop="createTime" label="创建时间" width="180" />
     </el-table>
-  </div>
+  </el-card>
 </template>
 
 <style scoped>
 .hint {
-  margin: 0 0 16px;
-  color: #909399;
-  font-size: 13px;
+  margin: 0 0 14px;
+  color: var(--text-muted);
+  font-size: 12.5px;
 }
 </style>

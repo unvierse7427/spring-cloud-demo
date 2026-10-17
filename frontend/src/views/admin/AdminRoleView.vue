@@ -156,12 +156,12 @@ async function savePermissions() {
 </script>
 
 <template>
-  <div>
+  <el-card shadow="never">
     <div class="toolbar">
       <el-button type="primary" @click="openCreate">新增角色</el-button>
     </div>
 
-    <el-table v-loading="loading" :data="roles" border stripe>
+    <el-table v-loading="loading" :data="roles">
       <el-table-column prop="id" label="ID" width="80" />
       <el-table-column label="角色编码" min-width="160">
         <template #default="{ row }">
@@ -238,17 +238,17 @@ async function savePermissions() {
         </el-button>
       </template>
     </el-drawer>
-  </div>
+  </el-card>
 </template>
 
 <style scoped>
 .toolbar {
-  margin-bottom: 16px;
+  margin-bottom: 14px;
 }
 
 .hint {
   margin: 0 0 12px;
-  color: #909399;
+  color: var(--text-muted);
   font-size: 12px;
 }
 
@@ -272,6 +272,6 @@ async function savePermissions() {
 }
 
 :deep(.perm-item small) {
-  color: #909399;
+  color: var(--text-muted);
 }
 </style>

@@ -29,7 +29,7 @@ onMounted(load)
 </script>
 
 <template>
-  <div>
+  <el-card shadow="never">
     <div class="toolbar">
       <el-tag type="info" effect="plain">当前在线 {{ onlineCount }} 人</el-tag>
       <el-button :loading="loading" @click="load">
@@ -44,7 +44,7 @@ onMounted(load)
       分钟无接口调用自动过期；登出立即移除。
     </p>
 
-    <el-table v-loading="loading" :data="users" border stripe>
+    <el-table v-loading="loading" :data="users">
       <el-table-column prop="userId" label="用户 ID" width="100" />
       <el-table-column prop="username" label="用户名" min-width="120" />
       <el-table-column label="昵称" min-width="120">
@@ -63,7 +63,7 @@ onMounted(load)
         <template #default="{ row }">{{ row.lastActiveTime || '—' }}</template>
       </el-table-column>
     </el-table>
-  </div>
+  </el-card>
 </template>
 
 <style scoped>
@@ -75,14 +75,14 @@ onMounted(load)
 }
 
 .hint {
-  margin: 0 0 16px;
-  color: #909399;
-  font-size: 13px;
+  margin: 0 0 14px;
+  color: var(--text-muted);
+  font-size: 12.5px;
 }
 
 .hint code {
   padding: 1px 4px;
-  border-radius: 4px;
-  background: var(--el-fill-color-light);
+  border-radius: var(--r-xs);
+  background: var(--surface-sunken);
 }
 </style>

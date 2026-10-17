@@ -118,7 +118,7 @@ function loginTypeText(type: string) {
 </script>
 
 <template>
-  <el-tabs v-model="tab" @tab-change="onTabChange">
+  <el-tabs v-model="tab" class="log-page" @tab-change="onTabChange">
     <el-tab-pane label="登录日志" name="login">
       <el-form :inline="true">
         <el-form-item label="用户名">
@@ -151,7 +151,7 @@ function loginTypeText(type: string) {
         </el-form-item>
       </el-form>
 
-      <el-table v-loading="loginLoading" :data="loginLogs" border stripe>
+      <el-table v-loading="loginLoading" :data="loginLogs">
         <el-table-column prop="id" label="ID" width="80" />
         <el-table-column prop="username" label="用户名" min-width="120" />
         <el-table-column label="类型" width="100">
@@ -218,7 +218,7 @@ function loginTypeText(type: string) {
         </el-form-item>
       </el-form>
 
-      <el-table v-loading="opLoading" :data="opLogs" border stripe>
+      <el-table v-loading="opLoading" :data="opLogs">
         <el-table-column prop="id" label="ID" width="80" />
         <el-table-column prop="serviceName" label="服务名" min-width="140" />
         <el-table-column label="用户" min-width="120">
@@ -266,8 +266,22 @@ function loginTypeText(type: string) {
 </template>
 
 <style scoped>
+/* 用面板样式包裹整个标签页容器，与其它后台页面保持一致的纸面质感 */
+.log-page {
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+}
+
 .pager {
   margin-top: 16px;
   justify-content: flex-end;
+}
+
+@media (max-width: 720px) {
+  .log-page {
+    padding: 14px;
+  }
 }
 </style>

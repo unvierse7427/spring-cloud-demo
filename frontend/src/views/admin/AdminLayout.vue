@@ -40,14 +40,16 @@ function handleCommand(command: string) {
 
 <template>
   <el-container class="admin-layout">
-    <el-aside width="220px" class="admin-aside">
+    <el-aside width="248px" class="admin-aside">
       <div class="brand">
         <div class="mark">A</div>
         <div class="brand-text">
           <strong>Admin Console</strong>
-          <span>用户 · 角色 · 权限 · 日志</span>
+          <span>后台管理</span>
         </div>
       </div>
+
+      <p class="nav-label">管理</p>
 
       <el-menu :default-active="activeMenu" router class="admin-menu">
         <el-menu-item v-for="item in navs" :key="item.path" :index="item.path">
@@ -55,6 +57,11 @@ function handleCommand(command: string) {
           <span>{{ item.label }}</span>
         </el-menu-item>
       </el-menu>
+
+      <footer class="aside-foot">
+        <span class="pulse" />
+        <span>仅 ROLE_ADMIN 可访问</span>
+      </footer>
     </el-aside>
 
     <el-container>
@@ -64,12 +71,12 @@ function handleCommand(command: string) {
           <p>{{ pageDesc }}</p>
         </div>
         <div class="header-actions">
-          <el-tag type="info" effect="plain">ROLE_ADMIN</el-tag>
+          <el-tag type="info" effect="plain" size="small">ROLE_ADMIN</el-tag>
           <el-dropdown @command="handleCommand">
             <span class="user-trigger">
-              <el-icon><UserFilled /></el-icon>
-              {{ admin.username || '未登录' }}
-              <el-icon><ArrowDown /></el-icon>
+              <span class="avatar">{{ (admin.username || 'A').charAt(0).toUpperCase() }}</span>
+              <span class="user-name">{{ admin.username || '未登录' }}</span>
+              <el-icon class="user-caret"><ArrowDown /></el-icon>
             </span>
             <template #dropdown>
               <el-dropdown-menu>
@@ -82,7 +89,9 @@ function handleCommand(command: string) {
       </el-header>
 
       <el-main class="admin-main">
-        <RouterView />
+        <div class="main-inner">
+          <RouterView />
+        </div>
       </el-main>
     </el-container>
   </el-container>
@@ -93,59 +102,135 @@ function handleCommand(command: string) {
   min-height: 100vh;
 }
 
+/* 与前台控制台共用同一套深色导航与冷调画布 */
 .admin-aside {
-  background: var(--el-bg-color);
-  border-right: 1px solid var(--el-border-color);
+  display: flex;
+  flex-direction: column;
+  background: var(--sidebar);
+  border-right: none;
 }
 
 .brand {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 18px 16px;
+  gap: 11px;
+  padding: 18px 18px 16px;
 }
 
 .mark {
   display: grid;
   place-items: center;
-  width: 36px;
-  height: 36px;
+  width: 34px;
+  height: 34px;
   border-radius: 10px;
-  background: linear-gradient(135deg, #4f46e5, #0ea5e9);
+  background: linear-gradient(135deg, #6366f1, #22d3ee);
   color: #fff;
+  font-size: 15px;
   font-weight: 700;
 }
 
 .brand-text strong {
   display: block;
+  color: var(--sidebar-text-strong);
   font-size: 14px;
+  letter-spacing: 0.2px;
 }
 
 .brand-text span {
-  color: #909399;
-  font-size: 12px;
+  color: var(--sidebar-muted);
+  font-size: 11.5px;
+}
+
+.nav-label {
+  margin: 6px 0 4px;
+  padding: 0 20px;
+  color: var(--sidebar-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
 }
 
 .admin-menu {
+  flex: 1;
+  padding: 0 10px;
   border-right: none;
+  background: transparent;
+}
+
+.admin-menu :deep(.el-menu-item) {
+  height: 40px;
+  margin-bottom: 2px;
+  padding-left: 14px !important;
+  border-radius: var(--r-md);
+  color: var(--sidebar-text);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.admin-menu :deep(.el-menu-item:hover) {
+  background: var(--sidebar-hover);
+  color: var(--sidebar-text-strong);
+}
+
+.admin-menu :deep(.el-menu-item.is-active) {
+  position: relative;
+  background: var(--sidebar-active);
+  color: var(--sidebar-text-strong);
+  font-weight: 600;
+}
+
+.admin-menu :deep(.el-menu-item.is-active)::before {
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  left: 0;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: #818cf8;
+  content: '';
+}
+
+.aside-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 20px;
+  border-top: 1px solid rgb(255 255 255 / 8%);
+  color: var(--sidebar-muted);
+  font-size: 11.5px;
+}
+
+.pulse {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #34d399;
+  box-shadow: 0 0 0 4px rgb(52 211 153 / 16%);
 }
 
 .admin-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid var(--el-border-color);
+  gap: 16px;
+  height: auto;
+  padding: 14px 24px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
 }
 
 .header-title h1 {
   margin: 0;
-  font-size: 18px;
+  color: var(--text);
+  font-size: 19px;
+  font-weight: 650;
+  letter-spacing: -0.2px;
 }
 
 .header-title p {
   margin: 2px 0 0;
-  color: #909399;
-  font-size: 12px;
+  color: var(--text-muted);
+  font-size: 13px;
 }
 
 .header-actions {
@@ -157,13 +242,62 @@ function handleCommand(command: string) {
 .user-trigger {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  color: var(--el-text-color-regular);
+  gap: 8px;
+  padding: 4px 10px 4px 4px;
+  border-radius: 999px;
+  color: var(--text-regular);
   cursor: pointer;
   outline: none;
+  transition: background-color 0.15s ease;
+}
+
+.user-trigger:hover {
+  background: var(--surface-hover);
+}
+
+.avatar {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.user-name {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.user-caret {
+  color: var(--text-faint);
+  font-size: 12px;
 }
 
 .admin-main {
-  background: var(--el-bg-color-page);
+  padding: 20px 24px 32px;
+  background: var(--bg);
+  overflow: auto;
+}
+
+.main-inner {
+  height: 100%;
+  max-width: 1320px;
+  margin: 0 auto;
+}
+
+@media (max-width: 900px) {
+  .admin-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .admin-main {
+    padding: 16px;
+  }
 }
 </style>

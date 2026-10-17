@@ -84,8 +84,10 @@ async function submit() {
   place-items: center;
   min-height: 100vh;
   padding: 24px;
-  background: radial-gradient(circle at 15% 15%, #1e2a4a, transparent 55%),
-    radial-gradient(circle at 85% 80%, #0f2f3f, transparent 50%), #0b1120;
+  background:
+    radial-gradient(circle at 15% 12%, rgb(99 102 241 / 28%), transparent 52%),
+    radial-gradient(circle at 85% 82%, rgb(34 211 238 / 16%), transparent 48%),
+    var(--sidebar);
 }
 
 .login-card {
@@ -97,7 +99,7 @@ async function submit() {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 18px;
+  margin-bottom: 20px;
 }
 
 .mark {
@@ -105,8 +107,8 @@ async function submit() {
   place-items: center;
   width: 42px;
   height: 42px;
-  border-radius: 11px;
-  background: linear-gradient(135deg, #4f46e5, #0ea5e9);
+  border-radius: var(--r-lg);
+  background: linear-gradient(135deg, #6366f1, #22d3ee);
   color: #fff;
   font-size: 18px;
   font-weight: 700;
@@ -114,17 +116,20 @@ async function submit() {
 
 .login-head strong {
   display: block;
+  color: var(--text);
   font-size: 16px;
+  font-weight: 650;
 }
 
 .login-head p {
   margin: 2px 0 0;
-  color: #909399;
+  color: var(--text-muted);
   font-size: 12px;
 }
 
 .submit {
   width: 100%;
+  height: 40px;
 }
 
 .login-foot {
@@ -132,10 +137,15 @@ async function submit() {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  margin-top: 18px;
+  margin-top: 20px;
   padding-top: 14px;
-  border-top: 1px dashed var(--el-border-color);
-  color: #909399;
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
   font-size: 12px;
+}
+
+.login-foot a {
+  color: var(--primary);
+  font-weight: 500;
 }
 </style>

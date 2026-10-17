@@ -1,21 +1,89 @@
+/* ==========================================================================
+   设计系统：令牌 → 基础样式 → Element Plus 主题覆盖
+   控制台统一采用「冷调中性底 + 靛蓝主色」的克制企业级风格
+   ========================================================================== */
+
 :root {
-  --bg: #f4f6fb;
+  /* 画布与容器 */
+  --bg: #f5f6fa;
   --surface: #ffffff;
-  --border: #e5e8f0;
-  --text: #1b2334;
-  --text-muted: #6c7689;
+  --surface-sunken: #f7f8fc;
+  --surface-hover: #f4f5fb;
+
+  /* 描边 */
+  --border: #e7e9f1;
+  --border-strong: #d8dce8;
+
+  /* 文本 */
+  --text: #12172a;
+  --text-regular: #3b4358;
+  --text-muted: #6e7789;
+  --text-faint: #9aa3b2;
+
+  /* 主色与语义色 */
   --primary: #4f46e5;
-  --success: #14875c;
-  --danger: #cf3f4b;
+  --primary-hover: #4338ca;
+  --primary-soft: #eef0ff;
+  --success: #0f8a5f;
+  --warning: #b45309;
+  --danger: #c8394a;
+
+  /* 侧边导航 */
+  --sidebar: #131a2b;
+  --sidebar-text: #c3cad9;
+  --sidebar-text-strong: #ffffff;
+  --sidebar-muted: #7b869c;
+  --sidebar-hover: rgb(255 255 255 / 6%);
+  --sidebar-active: rgb(99 102 241 / 24%);
+
+  /* 圆角 */
+  --r-xs: 4px;
+  --r-sm: 6px;
+  --r-md: 8px;
+  --r-lg: 12px;
+  --r-xl: 16px;
+
+  /* 阴影：只用于浮层，静态面板一律靠描边区分层级 */
+  --shadow-sm: 0 1px 2px rgb(18 23 42 / 5%);
+  --shadow-md: 0 8px 24px -12px rgb(18 23 42 / 18%);
+  --shadow-lg: 0 20px 48px -20px rgb(18 23 42 / 26%);
 
   /* 让 Element Plus 主色与控制台主题保持一致 */
   --el-color-primary: #4f46e5;
+  --el-color-primary-light-1: #6259e8;
+  --el-color-primary-light-2: #6f67ea;
   --el-color-primary-light-3: #7d76ec;
+  --el-color-primary-light-4: #8f89ef;
   --el-color-primary-light-5: #a5a0f2;
+  --el-color-primary-light-6: #bbb7f5;
   --el-color-primary-light-7: #cdcaf7;
   --el-color-primary-light-8: #e0defa;
   --el-color-primary-light-9: #eef0ff;
   --el-color-primary-dark-2: #3f38b7;
+
+  --el-color-success: var(--success);
+  --el-color-warning: var(--warning);
+  --el-color-danger: var(--danger);
+  --el-color-error: var(--danger);
+
+  --el-text-color-primary: var(--text);
+  --el-text-color-regular: var(--text-regular);
+  --el-text-color-secondary: var(--text-muted);
+  --el-text-color-placeholder: var(--text-faint);
+
+  --el-border-color: var(--border);
+  --el-border-color-light: var(--border);
+  --el-border-color-lighter: var(--border);
+  --el-fill-color-light: var(--surface-hover);
+  --el-fill-color-blank: var(--surface);
+
+  --el-border-radius-base: 8px;
+  --el-border-radius-small: 6px;
+  --el-font-size-base: 14px;
+  --el-font-size-small: 13px;
+  --el-font-size-extra-small: 12px;
+
+  --el-box-shadow-light: var(--shadow-md);
 }
 
 * {
@@ -32,10 +100,12 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font-family: 'Inter', 'PingFang SC', 'Microsoft YaHei', system-ui, -apple-system, sans-serif;
+  font-family: 'Inter', 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', system-ui, -apple-system,
+    sans-serif;
   font-size: 14px;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 h1,
@@ -48,4 +118,235 @@ p {
 a {
   color: inherit;
   text-decoration: none;
+}
+
+/* 数据密集区域统一使用等宽数字，避免列宽跳动 */
+.num,
+.el-table td,
+.el-descriptions__cell {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 统一可见焦点环，兼顾键盘可访问性 */
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: var(--r-xs);
+}
+
+/* --------------------------------------------------------------------------
+   通用布局与排版工具类
+   -------------------------------------------------------------------------- */
+
+/* 页面级纵向排布，作为各视图最外层容器的默认节奏 */
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* 区块标题：统一 12px 字重 600 的说明性小标题 */
+.block-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.block-desc {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+/* 内联的分隔点，用于元信息行 */
+.dot::before {
+  margin: 0 6px;
+  color: var(--text-faint);
+  content: '·';
+}
+
+/* --------------------------------------------------------------------------
+   Element Plus 主题覆盖
+   -------------------------------------------------------------------------- */
+
+/* 卡片：去掉默认重阴影，改为纸面质感 + 细描边 */
+.el-card {
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: none;
+}
+
+.el-card__header {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.el-card__body {
+  padding: 18px;
+}
+
+/* 表格：浅灰表头 + 细分隔线 + 悬停高亮 */
+.el-table {
+  --el-table-border-color: var(--border);
+  --el-table-header-bg-color: var(--surface-sunken);
+  --el-table-header-text-color: var(--text-muted);
+  --el-table-row-hover-bg-color: var(--surface-hover);
+  font-size: 13px;
+}
+
+.el-table th.el-table__cell {
+  height: 40px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.el-table td.el-table__cell {
+  padding: 9px 0;
+}
+
+.el-table--border,
+.el-table--group {
+  border-radius: var(--r-md);
+}
+
+/* 按钮：统一字重与高度，避免出现浏览器默认字号 */
+.el-button {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.el-button--large {
+  font-size: 14px;
+}
+
+/* 表单控件字号统一 */
+.el-input__inner,
+.el-textarea__inner,
+.el-select__placeholder,
+.el-input__inner::placeholder {
+  font-size: 13px;
+}
+
+.el-form-item__label {
+  color: var(--text-regular);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* 标签：小圆角、去掉过重的底色 */
+.el-tag {
+  border-radius: var(--r-sm);
+  font-weight: 500;
+}
+
+/* 描述列表：去掉重边框 */
+.el-descriptions__label.el-descriptions__cell.is-bordered-label {
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+/* 弹层 */
+.el-dialog,
+.el-message-box {
+  border-radius: var(--r-xl);
+}
+
+.el-dialog__header {
+  margin-right: 0;
+  padding: 18px 22px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.el-dialog__title {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.el-dialog__body {
+  padding: 20px 22px;
+}
+
+.el-dialog__footer {
+  padding: 0 22px 20px;
+}
+
+.el-drawer__header {
+  margin-bottom: 0;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+/* 标签页：底部指示线更轻，激活态加粗 */
+.el-tabs__header {
+  margin-bottom: 16px;
+}
+
+.el-tabs__nav-wrap::after {
+  height: 1px;
+  background: var(--border);
+}
+
+.el-tabs__item {
+  height: 40px;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.el-tabs__item.is-active {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+/* 空状态文案弱化，避免抢视觉焦点 */
+.el-empty__description p {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+/* 滚动条：细窄、低对比 */
+.el-scrollbar__bar {
+  opacity: 0.35;
+}
+
+* ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+* ::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 8px;
+  background: #c8cdda;
+  background-clip: content-box;
+}
+
+* ::-webkit-scrollbar-thumb:hover {
+  background: #aeb5c6;
+  background-clip: content-box;
+}
+
+* ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* 尊重系统的「减少动态效果」偏好 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

@@ -75,30 +75,38 @@ async function remove(row: User) {
 <template>
   <div class="page">
     <el-card shadow="never">
-      <el-form :inline="true" @submit.prevent="search">
-        <el-form-item label="关键字">
-          <el-input v-model="keyword" placeholder="搜索用户名 / 昵称" clearable style="width: 220px" @keyup.enter="search" />
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" @click="search">
+      <div class="toolbar">
+        <el-input
+          v-model="keyword"
+          class="search"
+          placeholder="搜索用户名 / 昵称"
+          clearable
+          @keyup.enter="search"
+        >
+          <template #prefix>
             <el-icon><Search /></el-icon>
-            <span>查询</span>
-          </el-button>
-          <el-button @click="reset">重置</el-button>
-          <el-button v-if="canCreate" type="primary" plain @click="openDialog">
-            <el-icon><Plus /></el-icon>
-            <span>新增用户</span>
-          </el-button>
-        </el-form-item>
-      </el-form>
+          </template>
+        </el-input>
+        <el-button type="primary" @click="search">
+          <el-icon><Search /></el-icon>
+          <span>查询</span>
+        </el-button>
+        <el-button @click="reset">重置</el-button>
+        <span class="spacer" />
+        <el-button v-if="canCreate" type="primary" plain @click="openDialog">
+          <el-icon><Plus /></el-icon>
+          <span>新增用户</span>
+        </el-button>
+      </div>
 
-      <el-alert v-if="!canCreate" type="info" :closable="false" show-icon class="tip">
-        <template #title>
+      <p v-if="!canCreate" class="notice">
+        <el-icon><InfoFilled /></el-icon>
+        <span>
           当前账号只具备 <strong>user:list</strong> 权限，因此不显示「新增用户」按钮，后端同样会拒绝越权调用。
-        </template>
-      </el-alert>
+        </span>
+      </p>
 
-      <el-table v-loading="store.loading" :data="store.users" border stripe class="table">
+      <el-table v-loading="store.loading" :data="store.users" class="table">
         <el-table-column prop="id" label="ID" width="80" />
         <el-table-column prop="username" label="用户名" min-width="120" />
         <el-table-column prop="nickname" label="昵称" min-width="120" />
@@ -119,7 +127,10 @@ async function remove(row: User) {
         </el-table-column>
       </el-table>
 
-      <el-alert v-if="store.error" type="error" :closable="false" show-icon class="tip" :title="store.error" />
+      <p v-if="store.error" class="notice notice-error">
+        <el-icon><WarningFilled /></el-icon>
+        <span>{{ store.error }}</span>
+      </p>
     </el-card>
 
     <el-dialog v-model="dialogVisible" title="新增用户" width="440px">
@@ -149,8 +160,47 @@ async function remove(row: User) {
   gap: 16px;
 }
 
-.tip {
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   margin-bottom: 14px;
+}
+
+.search {
+  width: 260px;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0 0 14px;
+  padding: 10px 14px;
+  border-radius: var(--r-md);
+  background: var(--primary-soft);
+  color: var(--text-regular);
+  font-size: 12.5px;
+  line-height: 1.7;
+}
+
+.notice :deep(.el-icon) {
+  margin-top: 3px;
+  color: var(--primary);
+}
+
+.notice-error {
+  margin: 14px 0 0;
+  background: rgb(200 57 74 / 8%);
+  color: var(--danger);
+}
+
+.notice-error :deep(.el-icon) {
+  color: var(--danger);
 }
 
 .table {
@@ -158,6 +208,16 @@ async function remove(row: User) {
 }
 
 .muted {
-  color: var(--text-muted);
+  color: var(--text-faint);
+}
+
+@media (max-width: 720px) {
+  .toolbar {
+    flex-wrap: wrap;
+  }
+
+  .search {
+    width: 100%;
+  }
 }
 </style>

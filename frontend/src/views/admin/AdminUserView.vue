@@ -122,77 +122,77 @@ async function saveRoles() {
 </script>
 
 <template>
-  <div>
-    <el-form :inline="true">
-      <el-form-item label="关键字">
+  <div class="page">
+    <el-card shadow="never">
+      <div class="toolbar">
         <el-input
           v-model="query.keyword"
+          class="search"
           placeholder="搜索用户名 / 昵称 / 邮箱"
           clearable
-          style="width: 240px"
           @keyup.enter="search"
-        />
-      </el-form-item>
-      <el-form-item label="状态">
-        <el-select v-model="query.status" placeholder="全部状态" style="width: 140px">
+        >
+          <template #prefix>
+            <el-icon><Search /></el-icon>
+          </template>
+        </el-input>
+        <el-select v-model="query.status" class="status" placeholder="全部状态">
           <el-option label="全部状态" value="" />
           <el-option label="启用" :value="1" />
           <el-option label="禁用" :value="0" />
         </el-select>
-      </el-form-item>
-      <el-form-item>
         <el-button type="primary" @click="search">查询</el-button>
         <el-button @click="reset">重置</el-button>
-      </el-form-item>
-    </el-form>
+      </div>
 
-    <el-table v-loading="loading" :data="users" border stripe>
-      <el-table-column prop="id" label="ID" width="80" />
-      <el-table-column prop="username" label="用户名" min-width="120" />
-      <el-table-column label="昵称" min-width="120">
-        <template #default="{ row }">{{ row.nickname || '—' }}</template>
-      </el-table-column>
-      <el-table-column label="邮箱" min-width="180">
-        <template #default="{ row }">{{ row.email || '—' }}</template>
-      </el-table-column>
-      <el-table-column label="状态" width="100">
-        <template #default="{ row }">
-          <el-tag :type="row.status === 1 ? 'success' : 'danger'">
-            {{ row.status === 1 ? '启用' : '禁用' }}
-          </el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column prop="createTime" label="创建时间" width="180" />
-      <el-table-column label="操作" width="230" fixed="right">
-        <template #default="{ row }">
-          <el-tooltip
-            v-if="row.id === ADMIN_USER_ID"
-            content="内置管理员账号不允许禁用"
-            placement="top"
-          >
-            <el-switch :model-value="row.status" :active-value="1" :inactive-value="0" disabled />
-          </el-tooltip>
-          <el-switch
-            v-else
-            :model-value="row.status"
-            :active-value="1"
-            :inactive-value="0"
-            :loading="statusUpdating === row.id"
-            @change="onStatusChange(row, $event)"
-          />
-          <el-button type="primary" link @click="openRoleDrawer(row)">分配角色</el-button>
-        </template>
-      </el-table-column>
-    </el-table>
+      <el-table v-loading="loading" :data="users">
+        <el-table-column prop="id" label="ID" width="80" />
+        <el-table-column prop="username" label="用户名" min-width="120" />
+        <el-table-column label="昵称" min-width="120">
+          <template #default="{ row }">{{ row.nickname || '—' }}</template>
+        </el-table-column>
+        <el-table-column label="邮箱" min-width="180">
+          <template #default="{ row }">{{ row.email || '—' }}</template>
+        </el-table-column>
+        <el-table-column label="状态" width="100">
+          <template #default="{ row }">
+            <el-tag :type="row.status === 1 ? 'success' : 'danger'" size="small" effect="light">
+              {{ row.status === 1 ? '启用' : '禁用' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="createTime" label="创建时间" width="180" />
+        <el-table-column label="操作" width="230" fixed="right">
+          <template #default="{ row }">
+            <el-tooltip
+              v-if="row.id === ADMIN_USER_ID"
+              content="内置管理员账号不允许禁用"
+              placement="top"
+            >
+              <el-switch :model-value="row.status" :active-value="1" :inactive-value="0" disabled />
+            </el-tooltip>
+            <el-switch
+              v-else
+              :model-value="row.status"
+              :active-value="1"
+              :inactive-value="0"
+              :loading="statusUpdating === row.id"
+              @change="onStatusChange(row, $event)"
+            />
+            <el-button type="primary" link @click="openRoleDrawer(row)">分配角色</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
 
-    <el-pagination
-      class="pager"
-      layout="total, prev, pager, next"
-      :total="total"
-      :current-page="query.page"
-      :page-size="query.size"
-      @current-change="handlePageChange"
-    />
+      <el-pagination
+        class="pager"
+        layout="total, prev, pager, next"
+        :total="total"
+        :current-page="query.page"
+        :page-size="query.size"
+        @current-change="handlePageChange"
+      />
+    </el-card>
 
     <el-drawer
       v-model="roleDrawerVisible"
@@ -217,6 +217,21 @@ async function saveRoles() {
 </template>
 
 <style scoped>
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.search {
+  width: 260px;
+}
+
+.status {
+  width: 150px;
+}
+
 .pager {
   margin-top: 16px;
   justify-content: flex-end;
@@ -224,7 +239,7 @@ async function saveRoles() {
 
 .hint {
   margin: 0 0 12px;
-  color: #909399;
+  color: var(--text-muted);
   font-size: 12px;
 }
 
@@ -236,5 +251,16 @@ async function saveRoles() {
 :deep(.el-checkbox) {
   display: flex;
   margin-right: 0;
+}
+
+@media (max-width: 720px) {
+  .toolbar {
+    flex-wrap: wrap;
+  }
+
+  .search,
+  .status {
+    width: 100%;
+  }
 }
 </style>
