@@ -18,6 +18,9 @@ public class JwtProperties {
     /** 密钥标识，写入 JWT 头部 kid */
     private String keyId = "cloud-jwt-key";
 
+    /** 签名私钥位置：支持 classpath:/file: 前缀，也支持裸文件系统路径 */
+    private String privateKeyLocation = "classpath:keys/private.pem";
+
     /** 访问令牌有效期 */
     private Duration accessTokenTtl = Duration.ofHours(2);
 
@@ -38,6 +41,14 @@ public class JwtProperties {
 
     public void setKeyId(String keyId) {
         this.keyId = keyId;
+    }
+
+    public String getPrivateKeyLocation() {
+        return privateKeyLocation;
+    }
+
+    public void setPrivateKeyLocation(String privateKeyLocation) {
+        this.privateKeyLocation = privateKeyLocation;
     }
 
     public Duration getAccessTokenTtl() {

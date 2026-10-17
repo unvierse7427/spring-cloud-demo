@@ -7,6 +7,7 @@ import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
 import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
+import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
 import org.springframework.security.converter.RsaKeyConverters;
@@ -64,10 +65,10 @@ public class JwtTokenService {
     }
 
     /**
-     * 由 private.pem / public.pem 构建 Nimbus 的 JWK 来源
+     * 由私钥（默认位于仓库外）+ 公钥构建 Nimbus 的 JWK 来源
      */
     private JWKSource<SecurityContext> jwkSource() throws IOException {
-        RSAPrivateKey privateKey = readKey("classpath:keys/private.pem", RsaKeyConverters.pkcs8());
+        RSAPrivateKey privateKey = readKey(properties.getPrivateKeyLocation(), RsaKeyConverters.pkcs8());
         RSAPublicKey publicKey = readKey("classpath:keys/public.pem", RsaKeyConverters.x509());
         RSAKey rsaKey = new RSAKey.Builder(publicKey)
                 .privateKey(privateKey)
@@ -78,7 +79,14 @@ public class JwtTokenService {
 
     private <T> T readKey(String location, org.springframework.core.convert.converter.Converter<InputStream, T> converter)
             throws IOException {
-        Resource resource = resourceLoader.getResource(location);
+        // 带 classpath:/file: 前缀的交给 ResourceLoader，裸文件系统路径（如 C:\...）交给 FileSystemResource
+        Resource resource = location.startsWith("classpath:") || location.startsWith("file:")
+                ? resourceLoader.getResource(location)
+                : new FileSystemResource(location);
+        if (!resource.exists()) {
+            throw new IllegalStateException("JWT 密钥文件不存在：" + location
+                    + "，请生成 RSA 密钥对，或用环境变量 JWT_PRIVATE_KEY_LOCATION 指定私钥路径");
+        }
         try (InputStream inputStream = resource.getInputStream()) {
             return converter.convert(inputStream);
         }

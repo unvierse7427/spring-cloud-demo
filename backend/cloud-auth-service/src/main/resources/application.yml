@@ -42,6 +42,9 @@ cloud:
   jwt:
     issuer: cloud-auth-service
     key-id: cloud-jwt-key
+    # 签名私钥不随代码入库（仓库里只保留公钥），默认从用户目录读取，
+    # 可用环境变量 JWT_PRIVATE_KEY_LOCATION 覆盖
+    private-key-location: ${JWT_PRIVATE_KEY_LOCATION:${user.home}/.cloud-demo/jwt/private.pem}
     access-token-ttl: 2h
     refresh-token-ttl: 7d
   online:
