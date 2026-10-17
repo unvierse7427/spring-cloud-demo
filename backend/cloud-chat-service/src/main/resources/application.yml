@@ -1,0 +1,58 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: cloud-chat-service
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
+        username: ${NACOS_USERNAME:nacos}
+        password: ${NACOS_PASSWORD:nacos}
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: ${MYSQL_URL:jdbc:mysql://127.0.0.1:3306/project?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true}
+    username: ${MYSQL_USERNAME:root}
+    password: ${MYSQL_PASSWORD:123456}
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: ${REDIS_DATABASE:0}
+      timeout: 3s
+      lettuce:
+        pool:
+          max-active: 16
+          max-idle: 8
+          min-idle: 0
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # HTTP 接口复用公钥验签；Netty 握手阶段的校验同样读取该公钥
+          public-key-location: classpath:keys/public.pem
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: GMT+8
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+
+cloud:
+  online:
+    timeout: 30m
+  chat:
+    # Netty WebSocket 独立监听端口，HTTP 端口仍为 server.port
+    websocket-port: ${CHAT_WS_PORT:9001}
+    websocket-path: /ws/chat
+    # 加入房间时下发的历史消息条数
+    history-limit: 50
+    # 单条聊天消息的最大长度
+    max-content-length: 1000
+
+logging:
+  level:
+    com.example: debug

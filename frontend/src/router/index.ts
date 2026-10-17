@@ -45,6 +45,18 @@ const router = createRouter({
       meta: { title: '用户管理', desc: '通过网关调用 cloud-user-service 接口', perms: ['user:list'] }
     },
     {
+      path: '/chat',
+      name: 'chat',
+      component: () => import('@/views/ChatView.vue'),
+      meta: { title: '聊天室', desc: '基于 Netty WebSocket 的实时群聊' }
+    },
+    {
+      path: '/knowledge',
+      name: 'knowledge',
+      component: () => import('@/views/KnowledgeView.vue'),
+      meta: { title: '知识库', desc: '上传文档构建知识库，检索增强问答并查看引用来源' }
+    },
+    {
       // 后台管理端有独立的登录入口与独立令牌，与前台登录互不影响
       path: '/admin/login',
       name: 'admin-login',

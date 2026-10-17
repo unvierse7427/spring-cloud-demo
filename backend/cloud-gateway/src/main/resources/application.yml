@@ -47,6 +47,52 @@ spring:
             - Path=/api/admin/**
           filters:
             - StripPrefix=1
+        # /api/chat/** -> cloud-chat-service 的 /chat/**（房间列表/创建、历史消息）
+        - id: cloud-chat-service
+          uri: lb://cloud-chat-service
+          predicates:
+            - Path=/api/chat/**
+          filters:
+            - StripPrefix=1
+        # /ws/chat -> cloud-chat-service 内置 Netty WebSocket 服务（独立端口 9001）。
+        # 注意：Nacos 中注册的是 HTTP 端口 8082，无法用 lb:ws:// 负载，故这里直连 Netty 端口。
+        - id: cloud-chat-websocket
+          uri: ${CHAT_WS_URI:ws://127.0.0.1:9001}
+          predicates:
+            - Path=/ws/chat
+        # /api/rag/** -> cloud-rag-service 的 /kb/**（RAG 知识库：知识库管理、文档上传、检索问答）
+        - id: cloud-rag-service
+          uri: lb://cloud-rag-service
+          predicates:
+            - Path=/api/rag/**
+          filters:
+            - StripPrefix=2
+        # 以下路由把各服务的 OpenAPI 描述文件收拢到网关，供 /swagger-ui.html 聚合页读取。
+        # 统一走 /api-docs/{服务名}，避免与 springdoc 自身的 /v3/api-docs/{group} 冲突。
+        - id: api-docs-auth
+          uri: lb://cloud-auth-service
+          predicates:
+            - Path=/api-docs/auth
+          filters:
+            - RewritePath=/api-docs/auth, /v3/api-docs
+        - id: api-docs-user
+          uri: lb://cloud-user-service
+          predicates:
+            - Path=/api-docs/user
+          filters:
+            - RewritePath=/api-docs/user, /v3/api-docs
+        - id: api-docs-chat
+          uri: lb://cloud-chat-service
+          predicates:
+            - Path=/api-docs/chat
+          filters:
+            - RewritePath=/api-docs/chat, /v3/api-docs
+        - id: api-docs-rag
+          uri: lb://cloud-rag-service
+          predicates:
+            - Path=/api-docs/rag
+          filters:
+            - RewritePath=/api-docs/rag, /v3/api-docs
   security:
     oauth2:
       resourceserver:
@@ -57,3 +103,19 @@ spring:
 logging:
   level:
     com.example: debug
+
+# 接口文档：网关只做聚合，页面与文档内容由各服务提供
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    # 不展示网关自身的 OpenAPI，只展示下方聚合的各服务文档
+    disable-swagger-default-url: true
+    urls:
+      - name: 认证中心 cloud-auth-service
+        url: /api-docs/auth
+      - name: 用户服务 cloud-user-service
+        url: /api-docs/user
+      - name: 聊天服务 cloud-chat-service
+        url: /api-docs/chat
+      - name: RAG 知识库 cloud-rag-service
+        url: /api-docs/rag

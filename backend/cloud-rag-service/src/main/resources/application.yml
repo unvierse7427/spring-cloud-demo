@@ -1,0 +1,98 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: cloud-rag-service
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
+        username: ${NACOS_USERNAME:nacos}
+        password: ${NACOS_PASSWORD:nacos}
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: ${MYSQL_URL:jdbc:mysql://127.0.0.1:3306/project?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true}
+    username: ${MYSQL_USERNAME:root}
+    password: ${MYSQL_PASSWORD:123456}
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: ${REDIS_DATABASE:0}
+      timeout: 3s
+  servlet:
+    multipart:
+      # 知识库文档上传上限
+      max-file-size: 50MB
+      max-request-size: 50MB
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # 与网关联用同一把公钥离线验签
+          public-key-location: classpath:keys/public.pem
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: GMT+8
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+
+rocketmq:
+  name-server: ${ROCKETMQ_NAME_SERVER:127.0.0.1:9876}
+  producer:
+    group: rag-ingest-producer
+    send-message-timeout: 5000
+
+cloud:
+  rag:
+    # 通义千问（DashScope）：Embedding 与 LLM
+    dashscope:
+      api-key: ${DASHSCOPE_API_KEY:}
+      embedding-model: text-embedding-v2
+      chat-model: qwen-plus
+    llm:
+      # qwen：通义千问；deepseek：DeepSeek（OpenAI 兼容接口）
+      provider: ${RAG_LLM_PROVIDER:qwen}
+      deepseek:
+        api-key: ${DEEPSEEK_API_KEY:}
+        base-url: ${DEEPSEEK_BASE_URL:https://api.deepseek.com}
+        model-name: ${DEEPSEEK_MODEL:deepseek-chat}
+    # 向量库 Qdrant（gRPC 端口默认 6334）
+    qdrant:
+      host: ${QDRANT_HOST:127.0.0.1}
+      port: ${QDRANT_GRPC_PORT:6334}
+      collection: ${QDRANT_COLLECTION:rag_chunks}
+    # 文件存储 MinIO（9000 已被 cloud-auth-service 占用，这里改用 9002）
+    minio:
+      endpoint: ${MINIO_ENDPOINT:http://127.0.0.1:9002}
+      access-key: ${MINIO_ACCESS_KEY:minioadmin}
+      secret-key: ${MINIO_SECRET_KEY:minioadmin}
+      bucket: ${MINIO_BUCKET:rag-documents}
+    # 文档异步入库
+    ingest:
+      topic: rag-document-ingest
+      consumer-group: rag-ingest-consumer
+      chunk-size: 800
+      chunk-overlap: 100
+    # 检索问答
+    query:
+      default-top-k: 5
+      min-score: 0.6
+      # 带入提示词的历史问答轮数，保存在 Redis
+      history-rounds: 3
+      # 系统提示词：约束模型的作答方式，要求尽量依据文档原文作答
+      system-prompt: |
+        你是一个严谨的知识库问答助手，只能依据下面提供的资料回答用户问题。
+        要求：
+        1. 尽量使用资料中的原文作答，优先摘录、复述原文的关键句子，不要改写成同义表达，也不要润色、扩写或补充资料以外的信息。
+        2. 资料中没有的内容不要编造，可以回答“资料中未提及该内容”。
+        3. 回答使用中文，条理清晰，必要时分点说明，每一点尽量贴近原文措辞。
+        4. 不要在回答中罗列资料编号。
+
+logging:
+  level:
+    com.example: debug

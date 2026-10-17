@@ -124,3 +124,113 @@ export interface AuthUser {
   username: string
   authorities: string[] | null
 }
+
+/** 后端 com.example.chat.dto.ChatRoomView 房间视图 */
+export interface ChatRoom {
+  id: number
+  name: string
+  description: string | null
+  ownerId: number
+  ownerName: string
+  /** 当前房间在线人数，由 Netty 侧的会话注册表统计 */
+  onlineCount: number
+  createTime: string
+}
+
+/** 后端 com.example.chat.entity.ChatMessage 聊天消息 */
+export interface ChatMessage {
+  id: number
+  roomId: number
+  userId: number
+  username: string
+  content: string
+  /** CHAT 用户消息，SYSTEM 系统消息 */
+  msgType: 'CHAT' | 'SYSTEM'
+  createTime: string
+}
+
+/** 后端 com.example.rag.dto.KnowledgeBaseView 知识库列表项 */
+export interface KnowledgeBase {
+  id: number
+  name: string
+  description: string | null
+  embeddingModel: string
+  ownerName: string
+  documentCount: number
+  createTime: string
+}
+
+/** 后端 com.example.rag.dto.DocumentView 知识库文档 */
+export interface KbDocument {
+  id: number
+  kbId: number
+  fileName: string
+  /** 版本号，同名文档首次上传为 1，内容变化后递增 */
+  version: number
+  /** 1 最新版本（参与检索），0 历史版本（保留存档） */
+  latest: number
+  /** 可见角色码，逗号分隔，为空表示所有用户可见 */
+  visibleRoles: string
+  contentType: string | null
+  fileSize: number
+  /** 0 待处理 1 处理中 2 已完成 3 失败 */
+  status: number
+  statusText: string
+  chunkCount: number
+  errorMsg: string | null
+  createTime: string
+}
+
+/** 后端 com.example.rag.dto.RoleOption 上传文档时可选的可见角色 */
+export interface RoleOption {
+  roleCode: string
+  roleName: string
+}
+
+/** 后端 com.example.rag.dto.UploadResult 批量上传时单个文件的处理结果 */
+export interface UploadResult {
+  fileName: string
+  /** NEW 新增 / UPDATED 新版本 / DUPLICATE 库中已有 / FAILED 失败 */
+  result: 'NEW' | 'UPDATED' | 'DUPLICATE' | 'FAILED'
+  message: string
+  documentId: number | null
+  version: number | null
+}
+
+/** 后端 com.example.rag.dto.SourceRef 回答引用的资料片段 */
+export interface SourceRef {
+  documentId: number | null
+  fileName: string | null
+  /** 命中的文档版本号，检索只使用最新版本 */
+  version: number | null
+  score: number
+  snippet: string
+}
+
+/** 后端 com.example.rag.dto.DocumentPreview 文档预览信息 */
+export interface DocumentPreview {
+  documentId: number
+  fileName: string
+  contentType: string | null
+  fileSize: number
+  /** MinIO 预签名地址，有效期 10 分钟 */
+  url: string
+}
+
+/** 后端 com.example.rag.dto.AskResponse 知识库问答响应 */
+export interface AskResponse {
+  answer: string
+  sources: SourceRef[]
+}
+
+/** 后端 com.example.rag.dto.QaHistoryEntry 智能问答历史 */
+export interface QaHistoryEntry {
+  id: string
+  kbId: number
+  userId: number
+  username: string
+  question: string
+  answer: string
+  sources: SourceRef[]
+  createTime: string
+}

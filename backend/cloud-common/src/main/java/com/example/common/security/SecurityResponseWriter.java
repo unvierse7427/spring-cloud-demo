@@ -4,7 +4,7 @@ import com.example.common.result.Result;
 import com.example.common.result.ResultCode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import javax.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 
 /**

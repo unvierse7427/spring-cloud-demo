@@ -23,15 +23,23 @@ public class SecurityConfig {
     private static final String[] PUBLIC_ENDPOINTS = {
             "/api/auth/login",
             "/api/auth/refresh",
-            "/actuator/**"
+            "/actuator/**",
+            // WebSocket 握手由浏览器发起，无法携带 Authorization 头，
+            // 因此网关放行，改由 chat 服务内置的 Netty 用 URL 上的 token 参数验签
+            "/ws/**",
+            // 接口文档：网关聚合页与各服务的 OpenAPI 描述文件
+            "/swagger-ui/**",
+            "/swagger-ui.html",
+            "/v3/api-docs/**",
+            "/webjars/**"
     };
 
     @Bean
     public SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http) {
-        http.csrf().disable()
-                .httpBasic().disable()
-                .formLogin().disable()
-                .logout().disable()
+        http.csrf(csrf -> csrf.disable())
+                .httpBasic(basic -> basic.disable())
+                .formLogin(form -> form.disable())
+                .logout(logout -> logout.disable())
                 .securityContextRepository(NoOpServerSecurityContextRepository.getInstance())
                 .authorizeExchange(exchange -> exchange
                         .pathMatchers(HttpMethod.OPTIONS).permitAll()

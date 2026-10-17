@@ -1,6 +1,6 @@
 package com.example.common.log;
 
-import javax.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletRequest;
 
 /**
  * 从请求中提取客户端信息的小工具

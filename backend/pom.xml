@@ -7,7 +7,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>2.7.18</version>
+        <version>3.2.12</version>
         <relativePath/>
     </parent>
 
@@ -16,22 +16,31 @@
     <version>1.0.0</version>
     <packaging>pom</packaging>
     <name>cloud-parent</name>
-    <description>Spring Boot 2.7 + Spring Cloud Alibaba 微服务父工程</description>
+    <description>Spring Boot 3.2 + Spring Cloud Alibaba 微服务父工程</description>
 
     <modules>
         <module>cloud-common</module>
         <module>cloud-auth-service</module>
         <module>cloud-gateway</module>
         <module>cloud-user-service</module>
+        <module>cloud-chat-service</module>
+        <module>cloud-rag-service</module>
     </modules>
 
     <properties>
         <java.version>17</java.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-        <spring-cloud.version>2021.0.9</spring-cloud.version>
-        <spring-cloud-alibaba.version>2021.0.5.0</spring-cloud-alibaba.version>
-        <mybatis-plus.version>3.5.5</mybatis-plus.version>
+        <spring-cloud.version>2023.0.3</spring-cloud.version>
+        <spring-cloud-alibaba.version>2023.0.3.4</spring-cloud-alibaba.version>
+        <mybatis-plus.version>3.5.9</mybatis-plus.version>
+        <!-- LangChain4j 稳定版与集成模块的 beta 版本需要成对使用 -->
+        <langchain4j.version>1.22.0</langchain4j.version>
+        <langchain4j.beta.version>1.22.0-beta32</langchain4j.beta.version>
+        <minio.version>8.5.17</minio.version>
+        <rocketmq-spring.version>2.3.6</rocketmq-spring.version>
+        <!-- 接口文档，2.3.x 与 Spring Boot 3.2 对齐 -->
+        <springdoc.version>2.3.0</springdoc.version>
     </properties>
 
     <dependencyManagement>
@@ -50,6 +59,22 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+            <!-- LangChain4j 官方 BOM：core 与官方集成模块（qdrant、tika、open-ai 等） -->
+            <dependency>
+                <groupId>dev.langchain4j</groupId>
+                <artifactId>langchain4j-bom</artifactId>
+                <version>${langchain4j.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <!-- LangChain4j 社区 BOM：通义千问（DashScope）等社区集成 -->
+            <dependency>
+                <groupId>dev.langchain4j</groupId>
+                <artifactId>langchain4j-community-bom</artifactId>
+                <version>${langchain4j.beta.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
             <dependency>
                 <groupId>com.example</groupId>
                 <artifactId>cloud-common</artifactId>
@@ -57,13 +82,40 @@
             </dependency>
             <dependency>
                 <groupId>com.baomidou</groupId>
-                <artifactId>mybatis-plus-boot-starter</artifactId>
+                <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
                 <version>${mybatis-plus.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.baomidou</groupId>
                 <artifactId>mybatis-plus-core</artifactId>
                 <version>${mybatis-plus.version}</version>
+            </dependency>
+            <!-- 3.5.9 起分页插件依赖 JSQLParser，需单独引入 -->
+            <dependency>
+                <groupId>com.baomidou</groupId>
+                <artifactId>mybatis-plus-jsqlparser</artifactId>
+                <version>${mybatis-plus.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.minio</groupId>
+                <artifactId>minio</artifactId>
+                <version>${minio.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.rocketmq</groupId>
+                <artifactId>rocketmq-spring-boot-starter</artifactId>
+                <version>${rocketmq-spring.version}</version>
+            </dependency>
+            <!-- 接口文档：WebMVC 服务用 webmvc-ui，网关（WebFlux）用 webflux-ui -->
+            <dependency>
+                <groupId>org.springdoc</groupId>
+                <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+                <version>${springdoc.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.springdoc</groupId>
+                <artifactId>springdoc-openapi-starter-webflux-ui</artifactId>
+                <version>${springdoc.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

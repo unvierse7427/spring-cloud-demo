@@ -15,17 +15,18 @@ spring:
     url: ${MYSQL_URL:jdbc:mysql://127.0.0.1:3306/project?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true}
     username: ${MYSQL_USERNAME:root}
     password: ${MYSQL_PASSWORD:123456}
-  redis:
-    host: ${REDIS_HOST:127.0.0.1}
-    port: ${REDIS_PORT:6379}
-    password: ${REDIS_PASSWORD:}
-    database: ${REDIS_DATABASE:0}
-    timeout: 3s
-    lettuce:
-      pool:
-        max-active: 16
-        max-idle: 8
-        min-idle: 0
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: ${REDIS_DATABASE:0}
+      timeout: 3s
+      lettuce:
+        pool:
+          max-active: 16
+          max-idle: 8
+          min-idle: 0
   security:
     oauth2:
       resourceserver:
