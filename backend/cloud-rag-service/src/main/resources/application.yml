@@ -56,7 +56,7 @@ cloud:
       chat-model: qwen-plus
     llm:
       # qwen：通义千问；deepseek：DeepSeek（OpenAI 兼容接口）
-      provider: ${RAG_LLM_PROVIDER:qwen}
+      provider: ${RAG_LLM_PROVIDER:deepseek}
       deepseek:
         api-key: ${DEEPSEEK_API_KEY:}
         base-url: ${DEEPSEEK_BASE_URL:https://api.deepseek.com}
@@ -76,23 +76,49 @@ cloud:
     ingest:
       topic: rag-document-ingest
       consumer-group: rag-ingest-consumer
-      chunk-size: 800
-      chunk-overlap: 100
+      # 子块：入向量库参与相似度计算，粒度小、语义集中
+      chunk-size: 400
+      chunk-overlap: 50
+      # 父块：正文随子块一起入库，命中后作为 Prompt 输入，粒度大、上下文完整
+      parent-chunk-size: 2000
+      parent-chunk-overlap: 200
+      # 假设问题：入库时为每个子块预生成若干条它能够回答的问题，作为额外检索入口
+      hypothetical-questions:
+        enabled: true
+        count: 3
+    # 图片 OCR：识别由 Python(PaddleOCR) 服务完成，这里经 MQ 异步调用
+    ocr:
+      base-url: ${OCR_BASE_URL:http://127.0.0.1:8100}
+      # 图片体积上限（与 ocr-service/main.py 的 OCR_MAX_IMAGE_MB 保持一致）
+      max-image-mb: ${OCR_MAX_IMAGE_MB:10}
+      allowed-extensions: jpg,jpeg,png,bmp,webp
+      topic: rag-ocr-request
+      consumer-group: rag-ocr-consumer
+      connect-timeout: 3000
+      read-timeout: 60000
     # 检索问答
     query:
-      default-top-k: 5
-      min-score: 0.6
+      default-top-k: 10
+      min-score: 0.55
       # 带入提示词的历史问答轮数，保存在 Redis
       history-rounds: 3
-      # 系统提示词：约束模型的作答方式，要求尽量依据文档原文作答
+      # 查询转换：检索前对用户问题做重写、回溯提示与子查询分解，再合并多个检索式的结果
+      rewrite:
+        enabled: true
+        max-sub-queries: 3
+        max-queries: 4
+      # 系统提示词：只约束作答风格与格式，检索命中 / 未命中的差异由代码分支注入
       system-prompt: |
-        你是一个严谨的知识库问答助手，只能依据下面提供的资料回答用户问题。
-        要求：
-        1. 尽量使用资料中的原文作答，优先摘录、复述原文的关键句子，不要改写成同义表达，也不要润色、扩写或补充资料以外的信息。
-        2. 资料中没有的内容不要编造，可以回答“资料中未提及该内容”。
-        3. 回答使用中文，条理清晰，必要时分点说明，每一点尽量贴近原文措辞。
-        4. 不要在回答中罗列资料编号。
-
+            你是严谨的知识库问答助手，只能依据上下文提供的知识库材料响应提问。
+            
+            输出规则：
+            1. 全部使用中文作答，逻辑层次清楚；信息较多时使用分点表述。
+            2. 最终回答文本中，不得出现资料编号、文档ID、引用序号等标记。
+            3. 严格忠于知识库原文含义，不能篡改、引申、脑补没有依据的信息。
+            4. 当知识库缺少相关内容，不足以回答问题时，直接说明暂无相关信息，禁止编造内容。
+            5. 语言平实正式，聚焦问题本身，去除多余客套话，不主动拓展无关内容。
+            6. 若用户问题模糊，可以简短询问用户补充信息，不强行作答。
+            7. 不要输出markdown复杂样式，优先使用简单分点，保证可读性。
 logging:
   level:
     com.example: debug

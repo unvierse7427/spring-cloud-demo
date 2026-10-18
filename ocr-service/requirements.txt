@@ -1,0 +1,11 @@
+# OCR 服务依赖（Windows 原生安装，无需 Docker）
+# 安装：C:\Users\29356\tools\python\python.exe -m pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+
+fastapi
+uvicorn
+python-multipart
+pillow
+numpy
+
+paddlepaddle
+paddleocr

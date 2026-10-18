@@ -21,7 +21,8 @@ const consoleMenus: MenuItem[] = [
   { path: '/', label: '总览', icon: 'HomeFilled' },
   { path: '/users', label: '用户管理', icon: 'User', perms: ['user:list'] },
   { path: '/chat', label: '聊天室', icon: 'ChatDotRound' },
-  { path: '/knowledge', label: '知识库', icon: 'Collection' }
+  { path: '/knowledge', label: '知识库', icon: 'Collection' },
+  { path: '/ocr', label: '图片识别', icon: 'Picture' }
 ]
 
 const menus = computed(() =>

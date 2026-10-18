@@ -1,21 +1,25 @@
 <script setup lang="ts">
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules, UploadRequestOptions } from 'element-plus'
-import { onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import * as mammoth from 'mammoth'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import * as XLSX from 'xlsx'
 
 import {
-  askKnowledgeBase,
   clearAskHistory,
   createKnowledgeBase,
   deleteDocument,
   deleteKnowledgeBase,
-  fetchAskHistory,
+  fetchAskMessages,
+  fetchAskSessions,
   fetchDocumentDownloadUrl,
   fetchDocumentPreview,
   fetchDocuments,
   fetchKnowledgeBases,
   fetchRoleOptions,
+  fetchSuggestedQuestions,
   reindexDocument,
+  streamKnowledgeBaseChat,
   uploadDocuments
 } from '@/api/rag'
 import type {
@@ -23,7 +27,8 @@ import type {
   DocumentPreview,
   KbDocument,
   KnowledgeBase,
-  QaHistoryEntry,
+  QaChatMessage,
+  QaSessionView,
   RoleOption,
   SourceRef,
   UploadResult
@@ -31,6 +36,15 @@ import type {
 
 /** 文档仍在排队或解析中时，前端按该间隔轮询状态 */
 const POLL_INTERVAL = 3000
+
+/** 新会话默认展示的随机问题数量 */
+const NEW_SESSION_SUGGESTION_LIMIT = 10
+
+/** 助手回答的打字机速度（毫秒/字） */
+const TYPEWRITER_INTERVAL = 24
+
+/** 文档管理表格固定每页 10 条 */
+const DOC_PAGE_SIZE = 10
 
 /** 可在浏览器内直接渲染的图片扩展名 */
 const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp']
@@ -47,13 +61,86 @@ const loadingBases = ref(false)
 const loadingDocs = ref(false)
 const uploading = ref(false)
 const asking = ref(false)
+const docCurrentPage = ref(1)
+
+/** 文档管理筛选条件 */
+const docFilters = reactive({
+  keyword: '',
+  version: '',
+  status: '',
+  latest: ''
+})
 
 const question = ref('')
-const answer = ref<AskResponse | null>(null)
+const currentSessionId = ref<string | null>(null)
+const sessions = ref<QaSessionView[]>([])
+const messages = ref<QaChatMessage[]>([])
+const loadingSessions = ref(false)
+const chatContentRef = ref<HTMLElement | null>(null)
 
-/** 智能问答历史：当前知识库 + 当前用户，最新在前 */
-const history = ref<QaHistoryEntry[]>([])
-const loadingHistory = ref(false)
+/** 知识库级推荐问题：当前会话没有命中追问建议时作为回退 */
+const suggestions = ref<string[]>([])
+const loadingSuggestions = ref(false)
+
+/** 当前会话中的最后一条助手消息，用于展示回答后的继续追问建议 */
+const lastAssistantMessage = computed(() =>
+  [...messages.value].reverse().find((item) => item.role === 'ASSISTANT') ?? null
+)
+
+/** 当前回答对应的来源文件，固定展示在回答下方、相关问题上方 */
+const latestSourceFiles = computed(() =>
+  lastAssistantMessage.value ? messageSourceFiles(lastAssistantMessage.value) : []
+)
+
+/** 回答下方展示的问题：优先用当前会话最后一条回答带回的建议，没有时回退到知识库随机问题 */
+const displaySuggestions = computed(() => {
+  const matched = lastAssistantMessage.value?.suggestions ?? []
+  if (matched.length > 0) {
+    return matched
+  }
+  if (messages.value.length > 0) {
+    return suggestions.value
+  }
+  return currentSessionId.value == null ? suggestions.value : []
+})
+
+/** 展示区标题，说明问题来源 */
+const suggestionLabel = computed(() =>
+  (lastAssistantMessage.value?.suggestions?.length ?? 0) > 0
+    ? '本次匹配片段的相关问题 · 点击直接提问'
+    : messages.value.length === 0 && currentSessionId.value == null
+      ? '随机问题 · 点击直接提问'
+    : '切片预置的问题 · 点击直接提问'
+)
+
+/** 当前聊天区是否已有一轮可展示的问答 */
+const hasConversation = computed(() => messages.value.length > 0)
+
+/** 文档管理：按关键字/版本/状态/最新版本进行本地筛选 */
+const filteredDocuments = computed(() => {
+  const keyword = docFilters.keyword.trim().toLowerCase()
+  const version = docFilters.version.trim()
+  return documents.value.filter((item) => {
+    if (keyword && !item.fileName.toLowerCase().includes(keyword)) {
+      return false
+    }
+    if (version && String(item.version) !== version) {
+      return false
+    }
+    if (docFilters.status && String(item.status) !== docFilters.status) {
+      return false
+    }
+    if (docFilters.latest && String(item.latest) !== docFilters.latest) {
+      return false
+    }
+    return true
+  })
+})
+
+const pagedDocuments = computed(() => {
+  const start = (docCurrentPage.value - 1) * DOC_PAGE_SIZE
+  return filteredDocuments.value.slice(start, start + DOC_PAGE_SIZE)
+})
 
 /** 批量上传的逐文件结果 */
 const uploadResults = ref<UploadResult[]>([])
@@ -71,10 +158,9 @@ let flushTimer: number | null = null
 const previewVisible = ref(false)
 const previewLoading = ref(false)
 const preview = ref<DocumentPreview | null>(null)
-/** 从引用来源打开时带上的片段内容，文档列表打开时为空 */
-const previewSnippet = ref('')
-/** pdf：内嵌阅读器；image：图片；frame：纯文本 iframe；other：无法在线预览 */
-const previewKind = ref<'pdf' | 'image' | 'frame' | 'other'>('other')
+const previewHtml = ref('')
+/** pdf：内嵌阅读器；image：图片；frame：纯文本 iframe；word/excel：前端解析；other：无法在线预览 */
+const previewKind = ref<'pdf' | 'image' | 'frame' | 'word' | 'excel' | 'other'>('other')
 
 const dialogVisible = ref(false)
 const submitting = ref(false)
@@ -89,6 +175,11 @@ const rules: FormRules = {
 }
 
 let pollTimer: number | null = null
+let typingTimer: number | null = null
+let typingQueue = ''
+let typingTarget: QaChatMessage | null = null
+let typingResolvers: Array<() => void> = []
+let currentTypingMessageId: string | null = null
 
 onMounted(async () => {
   await loadRoleOptions()
@@ -98,7 +189,10 @@ onMounted(async () => {
   }
 })
 
-onBeforeUnmount(stopPolling)
+onBeforeUnmount(() => {
+  stopPolling()
+  stopTypewriter()
+})
 
 /** 载入可选角色，供上传文档时限定可见范围 */
 async function loadRoleOptions() {
@@ -137,34 +231,85 @@ async function loadBases() {
 
 async function selectBase(base: KnowledgeBase) {
   current.value = base
-  answer.value = null
   question.value = ''
+  currentSessionId.value = null
+  sessions.value = []
+  messages.value = []
+  resetDocFilters()
   stopPolling()
   await loadDocuments()
-  await loadHistory()
+  await Promise.all([loadSessions(), loadSuggestions()])
 }
 
-/** 拉取当前知识库下当前用户的问答历史 */
-async function loadHistory() {
+/** 拉取该知识库切片预生成的推荐问题 */
+async function loadSuggestions() {
   const base = current.value
   if (!base) {
-    history.value = []
+    suggestions.value = []
     return
   }
-  loadingHistory.value = true
+  loadingSuggestions.value = true
   try {
-    history.value = await fetchAskHistory(base.id)
+    suggestions.value = await fetchSuggestedQuestions(base.id, NEW_SESSION_SUGGESTION_LIMIT)
+  } catch {
+    suggestions.value = []
+  } finally {
+    loadingSuggestions.value = false
+  }
+}
+
+/** 点击推荐问题：直接以其为问题向模型提问 */
+async function askSuggestion(item: string) {
+  if (asking.value) return
+  question.value = item
+  await handleAsk()
+}
+
+/** 拉取当前知识库下当前用户的会话列表，默认自动切到最近更新的会话 */
+async function loadSessions() {
+  const base = current.value
+  if (!base) {
+    sessions.value = []
+    messages.value = []
+    currentSessionId.value = null
+    return
+  }
+  loadingSessions.value = true
+  try {
+    sessions.value = await fetchAskSessions(base.id)
+    if (sessions.value.length === 0) {
+      currentSessionId.value = null
+      messages.value = []
+      return
+    }
+    const currentExists = currentSessionId.value
+      ? sessions.value.some((item) => item.id === currentSessionId.value)
+      : false
+    const targetId = currentExists ? currentSessionId.value : sessions.value[0].id
+    await selectSession(targetId!)
   } catch (e) {
     ElMessage.error((e as Error).message)
   } finally {
-    loadingHistory.value = false
+    loadingSessions.value = false
   }
 }
 
-/** 点击历史记录，把问题与回答回填到问答区，引用来源可继续点击预览 */
-function restoreHistory(item: QaHistoryEntry) {
-  question.value = item.question
-  answer.value = { answer: item.answer, sources: item.sources ?? [] }
+/** 读取指定会话的完整聊天消息 */
+async function selectSession(sessionId: string) {
+  const base = current.value
+  if (!base) return
+  currentSessionId.value = sessionId
+  messages.value = await fetchAskMessages(base.id, sessionId)
+  scrollToBottom()
+}
+
+/** 开启新会话：清空当前聊天区并重新随机取一组默认问题 */
+async function startNewSession() {
+  if (asking.value) return
+  currentSessionId.value = null
+  messages.value = []
+  question.value = ''
+  await loadSuggestions()
 }
 
 async function handleClearHistory() {
@@ -177,7 +322,9 @@ async function handleClearHistory() {
   }
   try {
     await clearAskHistory(base.id)
-    history.value = []
+    sessions.value = []
+    messages.value = []
+    currentSessionId.value = null
     ElMessage.success('问答历史已清空')
   } catch (e) {
     ElMessage.error((e as Error).message)
@@ -190,6 +337,7 @@ async function loadDocuments() {
   loadingDocs.value = true
   try {
     documents.value = await fetchDocuments(base.id)
+    ensureDocPageInRange()
     syncPolling()
   } catch (e) {
     ElMessage.error((e as Error).message)
@@ -222,6 +370,29 @@ function stopPolling() {
   }
 }
 
+function handleDocFilterChange() {
+  docCurrentPage.value = 1
+}
+
+function resetDocFilters() {
+  docFilters.keyword = ''
+  docFilters.version = ''
+  docFilters.status = ''
+  docFilters.latest = ''
+  docCurrentPage.value = 1
+}
+
+function ensureDocPageInRange() {
+  const maxPage = Math.max(1, Math.ceil(filteredDocuments.value.length / DOC_PAGE_SIZE))
+  if (docCurrentPage.value > maxPage) {
+    docCurrentPage.value = maxPage
+  }
+}
+
+function handleDocPageChange(page: number) {
+  docCurrentPage.value = page
+}
+
 async function refreshDocumentsSilently() {
   const base = current.value
   if (!base) {
@@ -230,6 +401,7 @@ async function refreshDocumentsSilently() {
   }
   try {
     documents.value = await fetchDocuments(base.id)
+    ensureDocPageInRange()
     syncPolling()
   } catch {
     stopPolling()
@@ -338,8 +510,9 @@ async function handleDeleteBase(base: KnowledgeBase) {
     if (current.value?.id === base.id) {
       current.value = null
       documents.value = []
-      answer.value = null
-      history.value = []
+      sessions.value = []
+      messages.value = []
+      currentSessionId.value = null
       stopPolling()
     }
     await loadBases()
@@ -353,14 +526,142 @@ async function handleAsk() {
   const text = question.value.trim()
   if (!base || !text) return
   asking.value = true
+  const userMessage: QaChatMessage = {
+    id: `local-user-${Date.now()}`,
+    sessionId: currentSessionId.value ?? '',
+    kbId: base.id,
+    role: 'USER',
+    content: text,
+    createTime: new Date().toLocaleString()
+  }
+  const assistantMessage: QaChatMessage = {
+    id: `local-assistant-${Date.now()}`,
+    sessionId: currentSessionId.value ?? '',
+    kbId: base.id,
+    role: 'ASSISTANT',
+    content: '',
+    sources: [],
+    suggestions: [],
+    createTime: new Date().toLocaleString()
+  }
+  messages.value = [...messages.value, userMessage, assistantMessage]
+  const userEntry = messages.value[messages.value.length - 2]!
+  const assistantEntry = messages.value[messages.value.length - 1]!
+  question.value = ''
+  scrollToBottom()
   try {
-    answer.value = await askKnowledgeBase(base.id, { question: text })
-    await loadHistory()
+    let streamError = ''
+    let finalResponse: AskResponse | null = null
+    await streamKnowledgeBaseChat(
+      base.id,
+      { sessionId: currentSessionId.value ?? undefined, question: text },
+      {
+        onSession: (sessionId) => {
+          currentSessionId.value = sessionId
+          userEntry.sessionId = sessionId
+          assistantEntry.sessionId = sessionId
+        },
+        onDelta: (chunk) => {
+          enqueueAssistantText(assistantEntry, chunk)
+        },
+        onDone: (response) => {
+          finalResponse = response
+        },
+        onError: (message) => {
+          streamError = message
+        }
+      }
+    )
+    if (streamError) {
+      throw new Error(streamError)
+    }
+    await waitForTypewriter()
+    const responsePayload = finalResponse as AskResponse | null
+    if (responsePayload) {
+      currentSessionId.value = responsePayload.sessionId ?? currentSessionId.value
+      assistantEntry.content = responsePayload.answer
+      assistantEntry.sources = responsePayload.sources ?? []
+      assistantEntry.suggestions = responsePayload.suggestions ?? []
+    }
+    await loadSessions()
+    scrollToBottom()
   } catch (e) {
+    stopTypewriter()
+    messages.value = messages.value.filter((item) => item.id !== userEntry.id && item.id !== assistantEntry.id)
     ElMessage.error((e as Error).message)
   } finally {
     asking.value = false
   }
+}
+
+function scrollToBottom() {
+  nextTick(() => {
+    const node = chatContentRef.value
+    if (node) {
+      node.scrollTop = node.scrollHeight
+    }
+  })
+}
+
+function enqueueAssistantText(message: QaChatMessage, chunk: string) {
+  if (!chunk) return
+  typingTarget = message
+  currentTypingMessageId = message.id
+  typingQueue += chunk
+  if (typingTimer !== null) {
+    return
+  }
+  typingTimer = window.setInterval(() => {
+    if (!typingTarget || typingQueue.length === 0) {
+      stopTypewriter()
+      return
+    }
+    typingTarget.content += typingQueue.charAt(0)
+    typingQueue = typingQueue.slice(1)
+    scrollToBottom()
+    if (typingQueue.length === 0) {
+      stopTypewriter()
+    }
+  }, TYPEWRITER_INTERVAL)
+}
+
+function waitForTypewriter() {
+  if (typingQueue.length === 0 && typingTimer === null) {
+    return Promise.resolve()
+  }
+  return new Promise<void>((resolve) => {
+    typingResolvers.push(resolve)
+  })
+}
+
+function stopTypewriter() {
+  if (typingTimer !== null) {
+    window.clearInterval(typingTimer)
+    typingTimer = null
+  }
+  typingQueue = ''
+  typingTarget = null
+  currentTypingMessageId = null
+  const resolvers = typingResolvers
+  typingResolvers = []
+  resolvers.forEach((resolve) => resolve())
+}
+
+function isTypingMessage(message: QaChatMessage) {
+  return currentTypingMessageId === message.id
+}
+
+/** 回答下方展示来源文件，按 documentId 去重，避免同一文件重复出现多次 */
+function messageSourceFiles(message: QaChatMessage) {
+  const result: SourceRef[] = []
+  const seen = new Set<string>()
+  for (const source of message.sources ?? []) {
+    const key = source.documentId != null ? `doc-${source.documentId}` : `file-${source.fileName ?? ''}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    result.push(source)
+  }
+  return result
 }
 
 /** 判断文档能用哪种方式预览 */
@@ -371,14 +672,29 @@ function detectKind(fileName: string | null, contentType: string | null) {
   const ext = dot >= 0 ? name.slice(dot + 1) : ''
   if (type.includes('pdf') || ext === 'pdf') return 'pdf' as const
   if (type.startsWith('image/') || IMAGE_EXTENSIONS.includes(ext)) return 'image' as const
+  if (
+    ext === 'docx' ||
+    type.includes('wordprocessingml') ||
+    type.includes('msword')
+  ) {
+    return 'word' as const
+  }
+  if (
+    ext === 'xls' ||
+    ext === 'xlsx' ||
+    type.includes('spreadsheetml') ||
+    type.includes('ms-excel')
+  ) {
+    return 'excel' as const
+  }
   if (type.startsWith('text/') || TEXT_EXTENSIONS.includes(ext)) return 'frame' as const
   return 'other' as const
 }
 
 /** 打开预览弹窗：取回原件的内联临时地址，并按类型决定渲染方式 */
-async function loadPreview(documentId: number, snippet = '') {
-  previewSnippet.value = snippet
+async function loadPreview(documentId: number) {
   preview.value = null
+  previewHtml.value = ''
   previewKind.value = 'other'
   previewVisible.value = true
   previewLoading.value = true
@@ -386,6 +702,13 @@ async function loadPreview(documentId: number, snippet = '') {
     const data = await fetchDocumentPreview(documentId)
     preview.value = data
     previewKind.value = detectKind(data.fileName, data.contentType)
+    if (previewKind.value === 'word') {
+      previewHtml.value = isLegacyWordFile(data.fileName)
+        ? textToHtml(data.parsedText || '暂时无法解析该文档内容，请下载原件后查看。')
+        : await renderWordPreview(data.url)
+    } else if (previewKind.value === 'excel') {
+      previewHtml.value = await renderExcelPreview(data.url)
+    }
   } catch (e) {
     ElMessage.error((e as Error).message)
     previewVisible.value = false
@@ -394,18 +717,18 @@ async function loadPreview(documentId: number, snippet = '') {
   }
 }
 
-/** 点击引用来源预览原文 */
-function openPreview(source: SourceRef) {
-  if (!source.documentId) {
-    ElMessage.warning('该引用没有关联到具体文档，无法预览')
-    return
-  }
-  void loadPreview(source.documentId, source.snippet)
-}
-
 /** 文档管理列表里预览原件 */
 function openDocumentPreview(row: KbDocument) {
   void loadPreview(row.id)
+}
+
+/** 回答来源里预览原件 */
+function openSourcePreview(source: SourceRef) {
+  if (source.documentId == null) {
+    ElMessage.warning('该来源暂不支持预览')
+    return
+  }
+  void loadPreview(source.documentId)
 }
 
 /** 下载原件：后端给出的地址按附件返回，交给浏览器直接保存 */
@@ -423,10 +746,67 @@ async function saveDocument(documentId: number) {
   }
 }
 
+/** 回答来源里下载原件 */
+function saveSourceDocument(source: SourceRef) {
+  if (source.documentId == null) {
+    ElMessage.warning('该来源暂不支持下载')
+    return
+  }
+  void saveDocument(source.documentId)
+}
+
 /** 新窗口打开原件（地址 10 分钟内有效） */
 function openPreviewInNewTab() {
   if (!preview.value) return
   window.open(preview.value.url, '_blank', 'noopener')
+}
+
+async function fetchPreviewBuffer(url: string) {
+  const response = await fetch(url)
+  if (!response.ok) {
+    throw new Error('获取文档预览内容失败')
+  }
+  return response.arrayBuffer()
+}
+
+async function renderWordPreview(url: string) {
+  const arrayBuffer = await fetchPreviewBuffer(url)
+  const result = await mammoth.convertToHtml({ arrayBuffer })
+  return result.value || '<p>文档内容为空</p>'
+}
+
+async function renderExcelPreview(url: string) {
+  const arrayBuffer = await fetchPreviewBuffer(url)
+  const workbook = XLSX.read(arrayBuffer, { type: 'array' })
+  const sections = workbook.SheetNames.map((sheetName) => {
+    const sheet = workbook.Sheets[sheetName]
+    const html = XLSX.utils.sheet_to_html(sheet, { editable: false })
+    return `
+      <section class="sheet-section">
+        <h3 class="sheet-title">${sheetName}</h3>
+        <div class="sheet-table-wrap">${html}</div>
+      </section>
+    `
+  })
+  return sections.length > 0 ? sections.join('') : '<p>工作簿中没有可预览的工作表</p>'
+}
+
+function isLegacyWordFile(fileName: string) {
+  const lowerName = fileName.toLowerCase()
+  return lowerName.endsWith('.doc') && !lowerName.endsWith('.docx')
+}
+
+function textToHtml(text: string) {
+  return `<div class="doc-text-preview">${escapeHtml(text).replace(/\r?\n/g, '<br />')}</div>`
+}
+
+function escapeHtml(text: string) {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
 }
 
 function openDialog() {
@@ -474,10 +854,6 @@ function formatSize(size: number) {
   if (size < 1024) return `${size} B`
   if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
   return `${(size / 1024 / 1024).toFixed(1)} MB`
-}
-
-function formatScore(score: number) {
-  return typeof score === 'number' ? score.toFixed(3) : '-'
 }
 </script>
 
@@ -533,7 +909,8 @@ function formatScore(score: number) {
 
       <el-tabs v-else v-model="activeTab" class="main-tabs">
         <el-tab-pane label="文档管理" name="documents">
-          <div class="toolbar">
+          <div class="doc-pane">
+            <div class="toolbar">
             <el-select
               v-model="uploadRoles"
               class="role-select"
@@ -551,7 +928,13 @@ function formatScore(score: number) {
                 :value="role.roleCode"
               />
             </el-select>
-            <el-upload multiple :show-file-list="false" :http-request="handleUpload" :disabled="uploading">
+            <el-upload
+              multiple
+              :show-file-list="false"
+              :http-request="handleUpload"
+              :disabled="uploading"
+              accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.md,.csv,.html,.htm,.json,.xml,.jpg,.jpeg,.png,.bmp,.webp"
+            >
               <el-button type="primary" :loading="uploading">
                 <el-icon><UploadFilled /></el-icon>
                 <span>批量上传</span>
@@ -561,159 +944,303 @@ function formatScore(score: number) {
               <el-icon><Refresh /></el-icon>
               <span>刷新</span>
             </el-button>
-          </div>
+            </div>
 
-          <p class="hint">
+            <div class="doc-filters">
+            <el-input
+              v-model="docFilters.keyword"
+              clearable
+              class="doc-filter-name"
+              placeholder="按文档名称筛选"
+              @input="handleDocFilterChange"
+              @clear="handleDocFilterChange"
+            />
+            <el-input
+              v-model="docFilters.version"
+              clearable
+              class="doc-filter-version"
+              placeholder="版本号"
+              @input="handleDocFilterChange"
+              @clear="handleDocFilterChange"
+            />
+            <el-select
+              v-model="docFilters.status"
+              clearable
+              class="doc-filter-select"
+              placeholder="状态"
+              @change="handleDocFilterChange"
+              @clear="handleDocFilterChange"
+            >
+              <el-option label="待处理" value="0" />
+              <el-option label="处理中" value="1" />
+              <el-option label="已完成" value="2" />
+              <el-option label="失败" value="3" />
+            </el-select>
+            <el-select
+              v-model="docFilters.latest"
+              clearable
+              class="doc-filter-select"
+              placeholder="版本类型"
+              @change="handleDocFilterChange"
+              @clear="handleDocFilterChange"
+            >
+              <el-option label="最新版本" value="1" />
+              <el-option label="历史版本" value="0" />
+            </el-select>
+            <el-button @click="resetDocFilters">重置筛选</el-button>
+            <span class="doc-filter-count">共 {{ filteredDocuments.length }} 条</span>
+            </div>
+
+            <p class="hint">
             可一次选择多个文件；同名文件内容一致不会重复入库，内容有变化会生成新版本。未指定可见角色时默认所有用户可见。
-          </p>
+            图片（jpg/jpeg/png/bmp/webp，单张不超过 10MB）会自动调用 OCR 识别其中的文字并入库，同样可被智能问答检索。
+            </p>
 
-          <el-table
-            v-loading="loadingDocs"
-            :data="documents"
-            height="420"
-            empty-text="暂无文档"
-            :row-class-name="docRowClass"
-          >
-            <el-table-column label="文件名" min-width="230" show-overflow-tooltip>
-              <template #default="{ row }">
-                <span>{{ row.fileName }}</span>
-                <el-tag size="small" effect="plain" class="doc-tag">v{{ row.version }}</el-tag>
-                <el-tag v-if="row.latest === 0" size="small" type="info" effect="plain" class="doc-tag">
-                  历史版本
-                </el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column label="大小" width="100">
-              <template #default="{ row }">{{ formatSize(row.fileSize) }}</template>
-            </el-table-column>
-            <el-table-column label="状态" width="110">
-              <template #default="{ row }">
-                <el-tooltip :content="row.errorMsg || row.statusText" :disabled="!row.errorMsg">
-                  <el-tag :type="statusType(row.status)" size="small">{{ row.statusText }}</el-tag>
-                </el-tooltip>
-              </template>
-            </el-table-column>
-            <el-table-column label="可见角色" min-width="150">
-              <template #default="{ row }">
-                <el-tag
-                  v-for="name in visibleRoleNames(row.visibleRoles)"
-                  :key="name"
-                  size="small"
-                  effect="plain"
-                  class="doc-tag"
-                >
-                  {{ name }}
-                </el-tag>
-                <el-tag
-                  v-if="visibleRoleNames(row.visibleRoles).length === 0"
-                  size="small"
-                  type="info"
-                  effect="plain"
-                >
-                  所有用户
-                </el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column prop="chunkCount" label="分片数" width="90" />
-            <el-table-column prop="createTime" label="上传时间" width="170" />
-            <el-table-column label="操作" width="225" fixed="right">
-              <template #default="{ row }">
-                <el-button text size="small" type="primary" @click="openDocumentPreview(row)">预览</el-button>
-                <el-button text size="small" type="primary" @click="saveDocument(row.id)">下载</el-button>
-                <el-button text size="small" @click="handleReindex(row)">重新入库</el-button>
-                <el-button text size="small" type="danger" @click="handleDeleteDocument(row)">删除</el-button>
-              </template>
-            </el-table-column>
-          </el-table>
+            <div class="doc-table-wrap">
+              <el-table
+                v-loading="loadingDocs"
+                :data="pagedDocuments"
+                height="100%"
+                empty-text="暂无文档"
+                :row-class-name="docRowClass"
+              >
+                <el-table-column label="文件名" min-width="230" show-overflow-tooltip>
+                  <template #default="{ row }">
+                    <span>{{ row.fileName }}</span>
+                    <el-tag size="small" effect="plain" class="doc-tag">v{{ row.version }}</el-tag>
+                    <el-tag v-if="row.latest === 0" size="small" type="info" effect="plain" class="doc-tag">
+                      历史版本
+                    </el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column label="大小" width="100">
+                  <template #default="{ row }">{{ formatSize(row.fileSize) }}</template>
+                </el-table-column>
+                <el-table-column label="状态" width="110">
+                  <template #default="{ row }">
+                    <el-tooltip :content="row.errorMsg || row.statusText" :disabled="!row.errorMsg">
+                      <el-tag :type="statusType(row.status)" size="small">{{ row.statusText }}</el-tag>
+                    </el-tooltip>
+                  </template>
+                </el-table-column>
+                <el-table-column label="可见角色" min-width="150">
+                  <template #default="{ row }">
+                    <el-tag
+                      v-for="name in visibleRoleNames(row.visibleRoles)"
+                      :key="name"
+                      size="small"
+                      effect="plain"
+                      class="doc-tag"
+                    >
+                      {{ name }}
+                    </el-tag>
+                    <el-tag
+                      v-if="visibleRoleNames(row.visibleRoles).length === 0"
+                      size="small"
+                      type="info"
+                      effect="plain"
+                    >
+                      所有用户
+                    </el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="chunkCount" label="分片数" width="90" />
+                <el-table-column prop="createTime" label="上传时间" width="170" />
+                <el-table-column label="操作" width="180" fixed="right">
+                  <template #default="{ row }">
+                    <div class="doc-actions">
+                      <el-button text size="small" type="primary" class="doc-action-btn" @click="openDocumentPreview(row)">
+                        预览
+                      </el-button>
+                      <el-button text size="small" type="primary" class="doc-action-btn" @click="saveDocument(row.id)">
+                        下载
+                      </el-button>
+                      <el-button text size="small" class="doc-action-btn" @click="handleReindex(row)">
+                        重新入库
+                      </el-button>
+                      <el-button text size="small" type="danger" class="doc-action-btn" @click="handleDeleteDocument(row)">
+                        删除
+                      </el-button>
+                    </div>
+                  </template>
+                </el-table-column>
+              </el-table>
+            </div>
+
+            <div class="doc-pagination">
+              <el-pagination
+                background
+                layout="prev, pager, next"
+                :current-page="docCurrentPage"
+                :page-size="DOC_PAGE_SIZE"
+                :total="filteredDocuments.length"
+                @current-change="handleDocPageChange"
+              />
+            </div>
+          </div>
         </el-tab-pane>
 
         <el-tab-pane label="智能问答" name="ask">
-          <div class="ask">
-            <div class="ask-main">
-              <el-input
-                v-model="question"
-                type="textarea"
-                :rows="3"
-                maxlength="500"
-                show-word-limit
-                placeholder="向知识库提问，例如：这份文档的主要结论是什么？"
-                @keydown.ctrl.enter="handleAsk"
-              />
-              <div class="ask-actions">
-                <span class="ask-tip">Ctrl + Enter 快速提问 · 回答仅基于你有权限查看的最新文档</span>
-                <el-button type="primary" :loading="asking" :disabled="!question.trim()" @click="handleAsk">
-                  <el-icon><Promotion /></el-icon>
-                  <span>提问</span>
-                </el-button>
-              </div>
-
-              <div v-if="answer" class="answer">
-                <div class="answer-block">
-                  <div class="answer-label">回答</div>
-                  <div class="answer-text">{{ answer.answer }}</div>
-                </div>
-
-                <div v-if="answer.sources.length > 0" class="sources">
-                  <div class="answer-label">
-                    引用来源（{{ answer.sources.length }}）· 仅引用各文档的最新版本，点击可预览原文
-                  </div>
-                  <el-card
-                    v-for="(source, index) in answer.sources"
-                    :key="index"
-                    shadow="never"
-                    class="source-item"
-                    :class="{ clickable: !!source.documentId }"
-                    @click="openPreview(source)"
-                  >
-                    <div class="source-head">
-                      <div class="source-title">
-                        <span class="source-index">{{ index + 1 }}</span>
-                        <span class="source-file">{{ source.fileName || '未知文档' }}</span>
-                        <el-tag v-if="source.version" size="small" effect="plain">v{{ source.version }}</el-tag>
-                      </div>
-                      <el-tag size="small" type="info" effect="plain">相似度 {{ formatScore(source.score) }}</el-tag>
-                    </div>
-                    <div class="source-snippet">{{ source.snippet }}</div>
-                  </el-card>
-                </div>
-              </div>
-
-              <div v-else class="ask-empty">
-                <el-empty description="输入问题后点击「提问」" :image-size="72" />
-              </div>
-            </div>
-
+          <div class="chat-layout">
             <aside class="history">
               <div class="history-head">
-                <span class="history-title">历史问答</span>
-                <span class="history-count">{{ history.length }} 条</span>
-                <el-button
-                  text
-                  size="small"
-                  type="danger"
-                  :disabled="history.length === 0"
-                  @click="handleClearHistory"
-                >
-                  <el-icon><Delete /></el-icon>
-                  <span>清空</span>
-                </el-button>
+                <div class="history-head-main">
+                  <div class="history-title-row">
+                    <span class="history-title">历史会话</span>
+                    <span class="history-count">{{ sessions.length }} 个</span>
+                  </div>
+                  <span class="history-subtitle">继续追问已有会话，或开启一轮新对话</span>
+                </div>
+                <div class="history-head-actions">
+                  <el-button
+                    size="small"
+                    type="primary"
+                    class="history-action-btn"
+                    :disabled="asking"
+                    @click="startNewSession"
+                  >
+                    <el-icon><Plus /></el-icon>
+                    <span>新建会话</span>
+                  </el-button>
+                  <el-button
+                    size="small"
+                    plain
+                    type="danger"
+                    class="history-action-btn"
+                    :disabled="sessions.length === 0"
+                    @click="handleClearHistory"
+                  >
+                    <el-icon><Delete /></el-icon>
+                    <span>清空</span>
+                  </el-button>
+                </div>
               </div>
-              <div v-loading="loadingHistory" class="history-body">
-                <el-empty v-if="history.length === 0" description="暂无历史问答" :image-size="56" />
+              <div v-loading="loadingSessions" class="history-body">
+                <el-empty v-if="sessions.length === 0" description="暂无历史会话" :image-size="56" />
                 <div
-                  v-for="item in history"
+                  v-for="item in sessions"
                   :key="item.id"
                   class="history-item"
-                  @click="restoreHistory(item)"
+                  :class="{ active: currentSessionId === item.id }"
+                  @click="selectSession(item.id)"
                 >
-                  <div class="history-question">{{ item.question }}</div>
+                  <div class="history-question">{{ item.title }}</div>
+                  <div class="history-preview">{{ item.preview || '暂无预览内容' }}</div>
                   <div class="history-meta">
-                    <span>{{ item.createTime }}</span>
-                    <span>引用 {{ item.sources?.length || 0 }} 条</span>
+                    <span>{{ item.updateTime }}</span>
+                    <span>{{ item.messageCount }} 条消息</span>
                   </div>
                 </div>
               </div>
             </aside>
+
+            <section class="chat-panel">
+              <div ref="chatContentRef" class="chat-content">
+                <div v-if="!hasConversation" class="ask-empty">
+                  <el-empty description="在下方输入问题，开始一个新的会话" :image-size="80" />
+                </div>
+
+                <div v-else class="chat-thread">
+                  <div
+                    v-for="item in messages"
+                    :key="item.id"
+                    class="message-row"
+                    :class="item.role === 'USER' ? 'is-user' : 'is-assistant'"
+                  >
+                    <div
+                      class="message-bubble"
+                      :class="item.role === 'USER' ? 'user-bubble' : 'assistant-bubble'"
+                    >
+                      <div class="message-role">{{ item.role === 'USER' ? '我' : '知识库助手' }}</div>
+                      <div class="message-text">
+                        {{ item.content || (asking && item.role === 'ASSISTANT' ? '' : '') }}
+                        <span
+                          v-if="item.role === 'ASSISTANT' && isTypingMessage(item)"
+                          class="typewriter-caret"
+                          aria-hidden="true"
+                        ></span>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+
+                <div v-if="latestSourceFiles.length > 0" class="message-sources">
+                  <div class="message-sources-title">来源文件</div>
+                  <div
+                    v-for="source in latestSourceFiles"
+                    :key="source.documentId ?? source.fileName ?? source.snippet"
+                    class="message-source-item"
+                  >
+                    <span class="message-source-name">
+                      {{ source.fileName || '未命名文件' }}
+                      <template v-if="source.version">v{{ source.version }}</template>
+                    </span>
+                    <div class="message-source-actions">
+                      <el-button
+                        text
+                        size="small"
+                        type="primary"
+                        :disabled="source.documentId == null"
+                        @click="openSourcePreview(source)"
+                      >
+                        预览
+                      </el-button>
+                      <el-button
+                        text
+                        size="small"
+                        :disabled="source.documentId == null"
+                        @click="saveSourceDocument(source)"
+                      >
+                        下载
+                      </el-button>
+                    </div>
+                  </div>
+                </div>
+
+                <div
+                  v-if="displaySuggestions.length > 0"
+                  v-loading="loadingSuggestions"
+                  class="suggestions"
+                  :class="{ 'starter-suggestions': !hasConversation }"
+                >
+                  <div class="answer-label">{{ suggestionLabel }}</div>
+                  <div class="suggestion-list">
+                    <button
+                      v-for="(item, index) in displaySuggestions"
+                      :key="index"
+                      type="button"
+                      class="suggestion-item"
+                      :disabled="asking"
+                      @click="askSuggestion(item)"
+                    >
+                      <el-icon><ChatDotRound /></el-icon>
+                      <span class="suggestion-text">{{ item }}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="composer">
+                <el-input
+                  v-model="question"
+                  type="textarea"
+                  :rows="3"
+                  maxlength="500"
+                  show-word-limit
+                  resize="none"
+                  placeholder="发送消息，例如：这份文档的主要结论是什么？"
+                  @keydown.ctrl.enter="handleAsk"
+                />
+                <div class="composer-actions">
+                  <span class="ask-tip">Ctrl + Enter 快速提问 · 回答仅基于你有权限查看的最新文档</span>
+                  <el-button type="primary" round :loading="asking" :disabled="!question.trim()" @click="handleAsk">
+                    <el-icon><Promotion /></el-icon>
+                    <span>发送</span>
+                  </el-button>
+                </div>
+              </div>
+            </section>
           </div>
         </el-tab-pane>
       </el-tabs>
@@ -774,6 +1301,11 @@ function formatScore(score: number) {
           <div v-else-if="previewKind === 'image'" class="preview-image-wrap">
             <img :src="preview.url" class="preview-image" :alt="preview.fileName" />
           </div>
+          <div
+            v-else-if="previewKind === 'word' || previewKind === 'excel'"
+            class="preview-rich"
+            v-html="previewHtml"
+          />
           <div v-else class="preview-fallback">
             <el-alert
               type="info"
@@ -781,7 +1313,6 @@ function formatScore(score: number) {
               :closable="false"
               title="该格式无法在浏览器内直接预览，可下载原件后查看"
             />
-            <div v-if="previewSnippet" class="preview-snippet">{{ previewSnippet }}</div>
           </div>
         </template>
       </div>
@@ -959,6 +1490,14 @@ function formatScore(score: number) {
   min-height: 0;
 }
 
+.main-tabs :deep(.el-tabs__content) {
+  height: 100%;
+}
+
+.main-tabs :deep(.el-tab-pane) {
+  height: 100%;
+}
+
 .toolbar {
   display: flex;
   align-items: center;
@@ -966,11 +1505,54 @@ function formatScore(score: number) {
   margin-bottom: 10px;
 }
 
+.doc-pane {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.doc-filters {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.doc-filter-name {
+  width: 240px;
+}
+
+.doc-filter-version {
+  width: 140px;
+}
+
+.doc-filter-select {
+  width: 140px;
+}
+
+.doc-filter-count {
+  color: var(--text-faint);
+  font-size: 12px;
+}
+
 .hint {
   margin: 0 0 12px;
   color: var(--text-faint);
   font-size: 12px;
   line-height: 1.6;
+}
+
+.doc-table-wrap {
+  flex: 1;
+  min-height: 0;
+}
+
+.doc-pagination {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
 }
 
 .role-select {
@@ -981,31 +1563,53 @@ function formatScore(score: number) {
   margin-left: 6px;
 }
 
+.doc-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 8px;
+  align-items: center;
+}
+
+.doc-action-btn {
+  justify-content: flex-start;
+  margin: 0;
+  padding: 0;
+}
+
+.doc-actions :deep(.el-button + .el-button) {
+  margin-left: 0;
+}
+
 /* 历史版本整行置灰 */
 :deep(.history-row) {
   color: var(--text-muted);
 }
 
-/* 问答：左侧问答主区 + 右侧历史侧栏 */
-.ask {
+/* 智能问答：左侧历史，右侧聊天区 */
+.chat-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 264px;
+  grid-template-columns: 280px minmax(0, 1fr);
   gap: 18px;
-  align-items: start;
+  height: 100%;
+  min-height: 640px;
 }
 
-.ask-main {
+.chat-panel {
   display: flex;
   flex-direction: column;
-  gap: 12px;
   min-width: 0;
+  min-height: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  background: linear-gradient(180deg, var(--surface) 0%, var(--surface-sunken) 100%);
+  overflow: hidden;
 }
 
-.ask-actions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+.chat-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 24px 24px 18px;
 }
 
 .ask-tip {
@@ -1014,27 +1618,55 @@ function formatScore(score: number) {
 }
 
 .ask-empty {
-  padding: 10px 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100%;
 }
 
-.answer {
+.chat-thread {
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
 
-.answer-label {
+.message-row {
+  display: flex;
+}
+
+.message-row.is-user {
+  justify-content: flex-end;
+}
+
+.message-row.is-assistant {
+  justify-content: flex-start;
+}
+
+.message-bubble {
+  max-width: min(760px, 92%);
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  box-shadow: var(--shadow-sm);
+}
+
+.user-bubble {
+  border-color: color-mix(in srgb, var(--primary) 30%, var(--border));
+  background: color-mix(in srgb, var(--primary) 10%, #fff);
+}
+
+.assistant-bubble {
+  background: #fff;
+}
+
+.message-role {
   margin-bottom: 8px;
   color: var(--text-muted);
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 650;
 }
 
-.answer-text {
-  padding: 16px 18px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  background: var(--surface-sunken);
+.message-text {
   color: var(--text);
   font-size: 13.5px;
   line-height: 1.8;
@@ -1042,69 +1674,125 @@ function formatScore(score: number) {
   word-break: break-word;
 }
 
-.sources {
-  display: flex;
-  flex-direction: column;
+.typewriter-caret {
+  display: inline-block;
+  width: 1px;
+  height: 1.1em;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  background: var(--primary);
+  animation: blink-caret 0.9s step-end infinite;
 }
 
-.source-item {
-  margin-bottom: 8px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
+@keyframes blink-caret {
+  0%,
+  45% {
+    opacity: 1;
+  }
+  46%,
+  100% {
+    opacity: 0;
+  }
 }
 
-.source-item.clickable {
-  cursor: pointer;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
-}
-
-.source-item.clickable:hover {
-  border-color: var(--primary);
-  box-shadow: var(--shadow-md);
-}
-
-.source-item :deep(.el-card__body) {
+.message-sources {
+  width: min(760px, 92%);
+  margin-top: 10px;
   padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
 }
 
-.source-head {
+.message-sources-title {
+  margin-bottom: 8px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.message-source-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 6px;
+  padding: 8px 0;
 }
 
-.source-title {
+.message-source-item + .message-source-item {
+  border-top: 1px dashed var(--border);
+}
+
+.message-source-name {
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.message-source-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-width: 0;
+  flex-shrink: 0;
 }
 
-.source-index {
-  flex: none;
-  display: grid;
-  place-items: center;
-  width: 18px;
-  height: 18px;
-  border-radius: var(--r-xs);
-  background: var(--primary-soft);
-  color: var(--primary);
-  font-size: 11px;
-  font-weight: 650;
-}
-
-.source-file {
-  color: var(--text);
-  font-size: 13px;
+.answer-label {
+  color: var(--text-muted);
+  font-size: 12px;
   font-weight: 600;
 }
 
-.source-snippet {
-  color: var(--text-muted);
+/* 回答结束后展示的推荐问题 */
+.suggestions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 760px;
+}
+
+.starter-suggestions {
+  margin-top: 20px;
+}
+
+.suggestion-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.suggestion-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 7px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
   font-size: 12.5px;
-  line-height: 1.65;
+  line-height: 1.5;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.suggestion-item:hover:not(:disabled) {
+  border-color: var(--primary);
+  color: var(--primary);
+  box-shadow: var(--shadow-sm);
+}
+
+.suggestion-item:disabled {
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+.suggestion-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* 智能问答历史侧栏 */
@@ -1112,15 +1800,39 @@ function formatScore(score: number) {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  min-height: 0;
   padding: 14px;
   border: 1px solid var(--border);
-  border-radius: var(--r-lg);
+  border-radius: var(--r-xl);
   background: var(--surface-sunken);
 }
 
 .history-head {
   display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.history-head-main {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.history-title-row {
+  display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.history-head-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -1131,13 +1843,24 @@ function formatScore(score: number) {
 }
 
 .history-count {
-  flex: 1;
+  color: var(--text-faint);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.history-subtitle {
   color: var(--text-faint);
   font-size: 12px;
 }
 
+.history-action-btn {
+  width: 100%;
+  margin: 0;
+}
+
 .history-body {
-  max-height: 480px;
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
 }
 
@@ -1156,19 +1879,59 @@ function formatScore(score: number) {
   box-shadow: var(--shadow-sm);
 }
 
+.history-item.active {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+
 .history-question {
   color: var(--text);
   font-size: 12.5px;
+  font-weight: 600;
   line-height: 1.6;
+  word-break: break-word;
+}
+
+.history-preview {
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.55;
   word-break: break-word;
 }
 
 .history-meta {
   display: flex;
+  align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
   margin-top: 6px;
   color: var(--text-faint);
   font-size: 11.5px;
+}
+
+.composer {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 20px 18px;
+  border-top: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(8px);
+}
+
+.composer :deep(.el-textarea__inner) {
+  min-height: 96px !important;
+  padding: 14px 16px;
+  border-radius: 20px;
+  box-shadow: none;
+}
+
+.composer-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 /* 文档预览弹窗 */
@@ -1195,21 +1958,73 @@ function formatScore(score: number) {
   border-radius: var(--r-md);
 }
 
+.preview-rich {
+  max-height: 70vh;
+  padding: 16px 18px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: #fff;
+  color: var(--text);
+  line-height: 1.8;
+}
+
+.preview-rich :deep(p) {
+  margin: 0 0 12px;
+}
+
+.preview-rich :deep(.doc-text-preview) {
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.9;
+  word-break: break-word;
+}
+
+.preview-rich :deep(h1),
+.preview-rich :deep(h2),
+.preview-rich :deep(h3),
+.preview-rich :deep(h4) {
+  margin: 0 0 12px;
+  color: var(--text);
+}
+
+.preview-rich :deep(.sheet-section + .sheet-section) {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px dashed var(--border);
+}
+
+.preview-rich :deep(.sheet-title) {
+  margin: 0 0 12px;
+  font-size: 16px;
+}
+
+.preview-rich :deep(.sheet-table-wrap) {
+  overflow: auto;
+}
+
+.preview-rich :deep(table) {
+  min-width: 100%;
+  border-collapse: collapse;
+}
+
+.preview-rich :deep(th),
+.preview-rich :deep(td) {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  font-size: 13px;
+  vertical-align: top;
+}
+
+.preview-rich :deep(th) {
+  background: var(--surface-sunken);
+  font-weight: 600;
+}
+
 .preview-fallback {
   display: flex;
   flex-direction: column;
   gap: 14px;
-}
-
-.preview-snippet {
-  padding: 12px 14px;
-  border-radius: var(--r-md);
-  background: var(--surface-sunken);
-  color: var(--text-muted);
-  font-size: 12.5px;
-  line-height: 1.7;
-  white-space: pre-wrap;
-  word-break: break-word;
 }
 
 .preview-meta {
@@ -1219,12 +2034,16 @@ function formatScore(score: number) {
 }
 
 @media (max-width: 1180px) {
-  .ask {
+  .chat-layout {
     grid-template-columns: minmax(0, 1fr);
   }
 
   .history-body {
     max-height: 300px;
+  }
+
+  .history-head-actions {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -1247,8 +2066,27 @@ function formatScore(score: number) {
     flex-wrap: wrap;
   }
 
+  .doc-filter-name,
+  .doc-filter-version,
+  .doc-filter-select {
+    width: 100%;
+  }
+
   .role-select {
     width: 100%;
+  }
+
+  .chat-content {
+    padding: 18px 16px 14px;
+  }
+
+  .composer {
+    padding: 14px;
+  }
+
+  .composer-actions {
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .hint {

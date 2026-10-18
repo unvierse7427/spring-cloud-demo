@@ -215,22 +215,60 @@ export interface DocumentPreview {
   fileSize: number
   /** MinIO 预签名地址，有效期 10 分钟 */
   url: string
+  /** 无法直接浏览器内打开时的解析文本（如旧版 .doc） */
+  parsedText?: string
 }
 
 /** 后端 com.example.rag.dto.AskResponse 知识库问答响应 */
 export interface AskResponse {
+  sessionId?: string
   answer: string
   sources: SourceRef[]
+  /** 本次命中片段预生成的假设问题，展示在回答下方供继续追问 */
+  suggestions?: string[]
 }
 
-/** 后端 com.example.rag.dto.QaHistoryEntry 智能问答历史 */
-export interface QaHistoryEntry {
+/** 后端 com.example.rag.dto.QaSessionView 会话摘要 */
+export interface QaSessionView {
   id: string
   kbId: number
   userId: number
   username: string
-  question: string
-  answer: string
-  sources: SourceRef[]
+  title: string
+  preview: string
+  messageCount: number
   createTime: string
+  updateTime: string
+}
+
+/** 后端 com.example.rag.dto.QaChatMessage 会话消息 */
+export interface QaChatMessage {
+  id: string
+  sessionId: string
+  kbId: number
+  role: 'USER' | 'ASSISTANT'
+  content: string
+  sources?: SourceRef[]
+  suggestions?: string[]
+  createTime: string
+}
+
+/** 后端 com.example.rag.dto.OcrText 图片文字识别结果 */
+export interface OcrText {
+  /** 识别出的文本，按行以 \n 拼接 */
+  text: string
+  /** 识别出的文字行数 */
+  lineCount: number
+  /** 各行的平均置信度，取值 0~1 */
+  avgScore: number
+  /** OCR 服务端识别耗时（毫秒） */
+  elapsedMs: number
+  /** 按坐标重建的文本，表格区域已渲染为 Markdown 表格 */
+  markdown: string
+  /** 是否在图片中识别出表格 */
+  tableDetected: boolean
+  /** 识别出的表格行数，未识别出表格时为 0 */
+  tableRows: number
+  /** 识别出的表格列数，未识别出表格时为 0 */
+  tableCols: number
 }

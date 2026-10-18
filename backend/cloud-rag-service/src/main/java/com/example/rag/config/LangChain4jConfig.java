@@ -75,6 +75,13 @@ public class LangChain4jConfig {
                 .build();
     }
 
+    /** Qdrant 客户端：供按条件扫描向量使用（如取切片预生成的假设问题），随容器关闭释放 */
+    @Bean(destroyMethod = "close")
+    public QdrantClient qdrantClient(RagProperties properties) {
+        RagProperties.Qdrant qdrant = properties.getQdrant();
+        return new QdrantClient(QdrantGrpcClient.newBuilder(qdrant.getHost(), qdrant.getPort(), false).build());
+    }
+
     /** 向量库：Qdrant，使用 gRPC 端口；集合缺失时按嵌入模型实际维度自动创建 */
     @Bean
     public EmbeddingStore<TextSegment> embeddingStore(RagProperties properties, EmbeddingModel embeddingModel) throws Exception {
@@ -103,9 +110,16 @@ public class LangChain4jConfig {
         return new ApacheTikaDocumentParser();
     }
 
-    /** 递归分片器：优先按段落、换行切分，保留相邻分片的重叠内容 */
+    /** 子块分片器：优先按段落、换行切分，保留相邻分片的重叠内容；子块是向量检索的单位 */
     @Bean
     public DocumentSplitter documentSplitter(RagProperties properties) {
         return DocumentSplitters.recursive(properties.getIngest().getChunkSize(), properties.getIngest().getChunkOverlap());
+    }
+
+    /** 父块分片器：粒度更大，正文随子块一起入库，命中子块后作为 Prompt 输入送给模型 */
+    @Bean
+    public DocumentSplitter parentDocumentSplitter(RagProperties properties) {
+        return DocumentSplitters.recursive(properties.getIngest().getParentChunkSize(),
+                properties.getIngest().getParentChunkOverlap());
     }
 }

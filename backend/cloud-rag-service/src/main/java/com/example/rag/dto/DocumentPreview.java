@@ -16,6 +16,9 @@ public class DocumentPreview {
     /** MinIO 预签名地址，有效期 10 分钟；预览接口为内联打开，下载接口为附件保存 */
     private String url;
 
+    /** 无法在浏览器内直接打开时返回的解析文本（如旧版 .doc） */
+    private String parsedText;
+
     public Long getDocumentId() {
         return documentId;
     }
@@ -54,5 +57,13 @@ public class DocumentPreview {
 
     public void setUrl(String url) {
         this.url = url;
+    }
+
+    public String getParsedText() {
+        return parsedText;
+    }
+
+    public void setParsedText(String parsedText) {
+        this.parsedText = parsedText;
     }
 }

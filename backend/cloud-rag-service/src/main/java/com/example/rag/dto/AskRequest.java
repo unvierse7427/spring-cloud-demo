@@ -5,10 +5,21 @@ package com.example.rag.dto;
  */
 public class AskRequest {
 
+    /** 所属会话 id；不传则新建会话 */
+    private String sessionId;
+
     private String question;
 
     /** 检索的分片数量，缺省取配置值 */
     private Integer topK;
+
+    public String getSessionId() {
+        return sessionId;
+    }
+
+    public void setSessionId(String sessionId) {
+        this.sessionId = sessionId;
+    }
 
     public String getQuestion() {
         return question;

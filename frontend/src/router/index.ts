@@ -57,6 +57,12 @@ const router = createRouter({
       meta: { title: '知识库', desc: '上传文档构建知识库，检索增强问答并查看引用来源' }
     },
     {
+      path: '/ocr',
+      name: 'ocr',
+      component: () => import('@/views/OcrView.vue'),
+      meta: { title: '图片识别', desc: '上传图片提取文字，图片不会被保存' }
+    },
+    {
       // 后台管理端有独立的登录入口与独立令牌，与前台登录互不影响
       path: '/admin/login',
       name: 'admin-login',

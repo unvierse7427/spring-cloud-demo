@@ -6,7 +6,8 @@ import com.example.rag.dto.CreateKnowledgeBaseRequest;
 import com.example.rag.dto.DocumentPreview;
 import com.example.rag.dto.DocumentView;
 import com.example.rag.dto.KnowledgeBaseView;
-import com.example.rag.dto.QaHistoryEntry;
+import com.example.rag.dto.QaChatMessage;
+import com.example.rag.dto.QaSessionView;
 import com.example.rag.dto.RoleOption;
 import com.example.rag.dto.UploadResult;
 import com.example.rag.entity.KnowledgeBase;
@@ -22,6 +23,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.List;
 
@@ -122,10 +124,29 @@ public class KnowledgeBaseController {
         return Result.success(ragQueryService.ask(kbId, request));
     }
 
-    /** 当前用户在该知识库下的智能问答历史，最新在前 */
+    /** 知识库问答（SSE）：在同一会话中持续追问，回答按事件流逐段推送 */
+    @PostMapping("/{kbId}/ask/stream")
+    public SseEmitter askStream(@PathVariable Long kbId, @RequestBody AskRequest request) {
+        return ragQueryService.askStream(kbId, request);
+    }
+
+    /** 当前用户在该知识库下的会话列表，最近更新的会话在前 */
     @GetMapping("/{kbId}/history")
-    public Result<List<QaHistoryEntry>> history(@PathVariable Long kbId) {
+    public Result<List<QaSessionView>> history(@PathVariable Long kbId) {
         return Result.success(ragQueryService.history(kbId));
+    }
+
+    /** 当前用户查看指定会话下的全部消息 */
+    @GetMapping("/{kbId}/history/{sessionId}")
+    public Result<List<QaChatMessage>> historyMessages(@PathVariable Long kbId, @PathVariable String sessionId) {
+        return Result.success(ragQueryService.historyMessages(kbId, sessionId));
+    }
+
+    /** 知识库切片预生成的问题，用作界面上的推荐提问（每次随机取几条） */
+    @GetMapping("/{kbId}/suggestions")
+    public Result<List<String>> suggestions(@PathVariable Long kbId,
+                                            @RequestParam(value = "limit", required = false) Integer limit) {
+        return Result.success(ragQueryService.suggestions(kbId, limit));
     }
 
     /** 清空当前用户在该知识库下的智能问答历史 */

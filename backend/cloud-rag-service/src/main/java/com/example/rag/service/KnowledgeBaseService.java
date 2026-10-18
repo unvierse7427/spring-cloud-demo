@@ -19,6 +19,8 @@ import com.example.rag.support.ContentHash;
 import com.example.rag.support.CurrentUser;
 import com.example.rag.support.DocumentPermission;
 import com.example.rag.support.QaHistoryStore;
+import dev.langchain4j.data.document.Document;
+import dev.langchain4j.data.document.DocumentParser;
 import dev.langchain4j.data.segment.TextSegment;
 import dev.langchain4j.store.embedding.EmbeddingStore;
 import dev.langchain4j.store.embedding.filter.MetadataFilterBuilder;
@@ -56,6 +58,8 @@ public class KnowledgeBaseService {
 
     private final StorageService storageService;
 
+    private final DocumentParser documentParser;
+
     private final DocumentIngestProducer ingestProducer;
 
     private final EmbeddingStore<TextSegment> embeddingStore;
@@ -67,12 +71,14 @@ public class KnowledgeBaseService {
     private final SysRoleMapper sysRoleMapper;
 
     public KnowledgeBaseService(KnowledgeBaseMapper knowledgeBaseMapper, KbDocumentMapper documentMapper,
-                               StorageService storageService, DocumentIngestProducer ingestProducer,
+                               StorageService storageService, DocumentParser documentParser,
+                               DocumentIngestProducer ingestProducer,
                                EmbeddingStore<TextSegment> embeddingStore, RagProperties properties,
                                QaHistoryStore historyStore, SysRoleMapper sysRoleMapper) {
         this.knowledgeBaseMapper = knowledgeBaseMapper;
         this.documentMapper = documentMapper;
         this.storageService = storageService;
+        this.documentParser = documentParser;
         this.ingestProducer = ingestProducer;
         this.embeddingStore = embeddingStore;
         this.properties = properties;
@@ -188,6 +194,13 @@ public class KnowledgeBaseService {
         }
         String fileName = StringUtils.hasText(file.getOriginalFilename())
                 ? file.getOriginalFilename().trim() : "未命名文件";
+
+        // 图片会走 OCR 识别，体积上限比普通文档更严（与 Python 侧 OCR_MAX_IMAGE_MB 一致）
+        RagProperties.Ocr ocr = properties.getOcr();
+        if (ocr.isImage(fileName) && file.getSize() > ocr.getMaxImageBytes()) {
+            return UploadResult.failed(fileName, String.format("图片体积 %.2fMB 超出上限 %.0fMB",
+                    file.getSize() / 1024.0 / 1024.0, ocr.getMaxImageMb()));
+        }
 
         String contentHash;
         try (InputStream in = file.getInputStream()) {
@@ -362,7 +375,27 @@ public class KnowledgeBaseService {
         preview.setFileSize(document.getFileSize());
         preview.setUrl(storageService.presignedUrl(document.getObjectKey(), document.getFileName(),
                 document.getContentType(), download));
+        if (!download && isLegacyWord(document)) {
+            preview.setParsedText(parsePreviewText(document));
+        }
         return preview;
+    }
+
+    /** 旧版 .doc 浏览器内兼容性较差，改为解析文本后在前端展示 */
+    private boolean isLegacyWord(KbDocument document) {
+        String fileName = document.getFileName();
+        return StringUtils.hasText(fileName) && fileName.toLowerCase().endsWith(".doc")
+                && !fileName.toLowerCase().endsWith(".docx");
+    }
+
+    private String parsePreviewText(KbDocument document) {
+        try (InputStream in = storageService.download(document.getObjectKey())) {
+            Document parsed = documentParser.parse(in);
+            return StringUtils.hasText(parsed.text()) ? parsed.text() : "文档内容为空";
+        } catch (Exception e) {
+            log.warn("解析文档预览文本失败：documentId={}, {}", document.getId(), e.getMessage());
+            return "暂时无法解析该文档内容，请下载原件后查看。";
+        }
     }
 
     private KbDocument getRequiredDocument(Long documentId) {
