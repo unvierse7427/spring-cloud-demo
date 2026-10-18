@@ -31,6 +31,10 @@ Thumbs.db
 logs/
 *.log
 
+# ---- Python ----
+__pycache__/
+*.pyc
+
 # ---- Secrets ----
 # JWT 签名私钥不随代码入库，默认放在用户目录 ~/.cloud-demo/jwt/private.pem
 private.pem
