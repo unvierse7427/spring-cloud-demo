@@ -12,12 +12,12 @@ spring:
         password: ${NACOS_PASSWORD:nacos}
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: ${MYSQL_URL:jdbc:mysql://127.0.0.1:3306/project?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true}
+    url: ${MYSQL_URL:jdbc:mysql://47.94.98.55:3306/project?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true}
     username: ${MYSQL_USERNAME:root}
     password: ${MYSQL_PASSWORD:123456}
   data:
     redis:
-      host: ${REDIS_HOST:127.0.0.1}
+      host: ${REDIS_HOST:47.94.98.55}
       port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD:}
       database: ${REDIS_DATABASE:0}
@@ -42,7 +42,7 @@ mybatis-plus:
     map-underscore-to-camel-case: true
 
 rocketmq:
-  name-server: ${ROCKETMQ_NAME_SERVER:127.0.0.1:9876}
+  name-server: ${ROCKETMQ_NAME_SERVER:139.155.76.193:9876}
   producer:
     group: rag-ingest-producer
     send-message-timeout: 5000
@@ -63,7 +63,7 @@ cloud:
         model-name: ${DEEPSEEK_MODEL:deepseek-chat}
     # 向量库 Qdrant（gRPC 端口默认 6334）
     qdrant:
-      host: ${QDRANT_HOST:127.0.0.1}
+      host: ${QDRANT_HOST:47.94.98.55}
       port: ${QDRANT_GRPC_PORT:6334}
       collection: ${QDRANT_COLLECTION:rag_chunks}
     # 文件存储 MinIO（9000 已被 cloud-auth-service 占用，这里改用 9002）

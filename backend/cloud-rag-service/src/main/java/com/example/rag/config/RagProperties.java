@@ -145,7 +145,7 @@ public class RagProperties {
     /** Qdrant 向量库，使用 gRPC 端口（默认 6334） */
     public static class Qdrant {
 
-        private String host = "127.0.0.1";
+        private String host = "47.94.98.55";
 
         private int port = 6334;
 
